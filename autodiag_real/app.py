@@ -3,12 +3,12 @@ Każda wartość na ekranie pochodzi z odpowiedzi DME. Gdy jej nie ma: „brak o
 import datetime, os, queue, sys, threading, time
 from PySide6.QtCore import Qt, QObject, Signal, QTimer, QRect
 from PySide6.QtGui import QIcon, QAction, QColor, QPainter
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QComboBox, QLabel,
+from PySide6.QtWidgets import (QLineEdit, QCheckBox, QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QComboBox, QLabel,
     QTableWidget, QTableWidgetItem, QHeaderView, QPlainTextEdit, QMessageBox, QFileDialog, QStackedWidget, QFrame, QSizePolicy, QAbstractItemView, QScrollArea)
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from autodiag_real import me72, ds2, updater
+from autodiag_real import me72, ds2, updater, extras
 from autodiag_real.version import VERSION
 from autodiag_real.ui.theme import Theme
 from autodiag_real.ui.widgets import glow, Panel, Ring, Spark, Bar, Icon, MStripe, Hero, WindowArt, RED, BLUE, CYAN, GREEN, AMBER, TXT, MUTED
@@ -24,25 +24,47 @@ def resource(*name):
 
 
 DISABLED = {
-    "Flash": ("ECU Programowanie (Flash)", "Wyłączone dla bezpieczeństwa. Błąd zapisu może trwale uszkodzić sterownik silnika – auto nie odpali. "
-              "Brak sprawdzonego bootloadera i sum kontrolnych dla Twojego DME, a zgadywać nie będziemy."),
-    "Mapy": ("Mapy ECU / Tuning", "Wyłączone. Edycja map bez zweryfikowanej definicji dla Twojego numeru oprogramowania to zgadywanie."),
-    "Kodowanie": ("Kodowanie (NCS)", "Wyłączone. Brak zweryfikowanych danych kodowania dla E39 – do kodowania użyj NCS Expert."),
-    "Retrofit": ("Retrofit", "Wyłączone. Wymaga kodowania modułów (patrz Kodowanie)."),
-    "Tryby mocy": ("Touring Studio / Tryby mocy", "Wyłączone. Zmiana mocy = zmiana map w DME (flash), a flash jest wyłączony."),
-    "Serwis": ("Serwis / Procedury", "Wyłączone. Reset serwisu i adaptacje przepustnicy dotyczą licznika/innych komend – niezweryfikowane dla E39."),
+    "Flash": ("ECU Programowanie (Flash / Write)", "Wyłączone na stałe dla bezpieczeństwa. Błąd zapisu może trwale uszkodzić sterownik silnika – auto nie odpali. "
+              "Brak sprawdzonego bootloadera i sum kontrolnych dla Twojego DME."),
+    "Backup": ("Backup ECU (kopia pamięci DME)", "Wyłączone. ME7.2 udostępnia odczyt pamięci (23 readMemoryByAddress) dopiero po odblokowaniu zabezpieczenia (seed/key), "
+               "a bezpiecznej, sprawdzonej procedury dla tego DME nie mamy. Pełny odczyt robi się przez BDM/bootmode z otwartym sterownikiem."),
+    "Mapy": ("Mapy ECU", "Wyłączone. Edycja map bez zweryfikowanej definicji dla Twojego numeru oprogramowania to zgadywanie, a zapis wymaga flash."),
+    "Tryby mocy": ("Touring Studio / Tryby mocy · Chip-tuning Stage 1/2/3", "Tylko do wglądu: Stage 1 – sama zmiana map (typowo +5–8% na M62), Stage 2 – mapy + dolot/wydech, "
+                   "Stage 3 – zmiany mechaniczne. Każdy wymaga zapisu map (flash), a flash jest wyłączony na stałe."),
+    "Kodowanie": ("Kodowanie (NCS)", "Wyłączone na stałe. Brak zweryfikowanych danych kodowania dla E39 – do kodowania użyj NCS Expert."),
+    "Retrofit": ("Retrofit & Tuning", "Wyłączone. Retrofit wymaga kodowania modułów (NCS), a kodowanie jest wyłączone."),
+    "Serwis": ("Serwis / Procedury (reset serwisu, interwał IKE, adaptacje)", "Wyłączone. Nie mamy sprawdzonych komend DS2 do odczytu i kasowania interwału serwisowego w IKE E39 "
+               "ani komendy kasowania adaptacji ME7.2 (KWP 31/3B) z potwierdzonym formatem. Reset serwisu zrób przyciskiem w zegarach (licznik dzienny + zapłon poz. 1). "
+               "Adaptacje mieszanki można ODCZYTAĆ w zakładce Adaptacje."),
+    "Testy": ("Active tests (testy elementów wykonawczych)", "Wyłączone. Brak sprawdzonych komend sterowania elementami (wtryskiwacze, wentylator, VANOS) dla ME7.2 – "
+              "zła komenda przy pracującym silniku może być niebezpieczna."),
+    "Guided": ("Guided (diagnoza prowadzona)", "Wyłączone. Wymagała bazy procedur producenta, której program nie ma. Użyj AUTO-DIAGNOZA (Smart Scan) – zbiera prawdziwe odczyty."),
+    "Pojazdy": ("Pojazdy (baza aut)", "Niepotrzebne – program jest dopasowany do jednego auta: BMW E39 540i (M62TU, ME7.2)."),
+    "Katalog": ("Katalog funkcji specjalnych (SF)", "Wyłączone. Funkcje specjalne to kodowanie i procedury serwisowe bez sprawdzonych komend dla E39."),
+    "AI": ("AI Mechanic / Baza wiedzy / Chmura", "Usunięte w audycie. Stara wersja wysyłała dane do chmury i podawała ogólne porady, nie odczyty z auta."),
+    "Companion": ("Companion (telefon) / QR", "Usunięte w audycie – otwierało serwer sieciowy na laptopie bez zabezpieczeń."),
+    "ODX": ("ODX / Sekwencje / UDS", "Nie dotyczy E39. ODX i UDS (ISO 14229) to diagnostyka nowszych aut na CAN; E39 używa DS2 i KWP2000 po K-line."),
+    "VCI": ("VCI / DoIP / J2534", "Nie dotyczy. Jedynym interfejsem jest kabel K+DCAN (port COM – wybór na stronie Przegląd). DoIP jest od serii F."),
+    "LPG": ("LPG", "Nie dotyczy. Sterownik LPG ma własny program producenta instalacji i nie rozmawia przez K-line BMW."),
+    "Wydech": ("Klapa wydechu", "Nie dotyczy. E39 540i nie ma sterowanej klapy wydechu w DME."),
+    "Hamownia": ("Wirtualna hamownia", "Wyłączone. Stara wersja podawała szacunek, nie pomiar. Do rzeczywistej mocy potrzebna jest hamownia."),
     "EWS": ("EWS / immobilizer · emisja", "Niedostępne i nie będzie. Obchodzenie zabezpieczenia przed kradzieżą i wyłączanie sond/katalizatora/emisji "
             "nie są wspierane (nielegalne / niebezpieczne)."),
 }
 
-NAV = [("Home", "home", "home"), ("Diagnostyka", "gear", "Błędy"), ("Live Data", "chart", "Na żywo"), ("Zapłony", "ai", "Zapłony"),
-       ("BMW Expert", "roundel", "Moduły"), ("Touring Studio", "car", "Tryby mocy"), ("Serwis", "wrench", "Serwis"), ("Kodowanie", "code", "Kodowanie"),
-       ("ECU Program.", "chip", "Flash"), ("Dane / Logi", "db", "Log"), ("Ustawienia", "gear", "Ustawienia")]
-SIDE = [("Przegląd", "home", "home"), ("Identyfikacja DME", "chip", "Identyfikacja"), ("Diagnostyka (błędy)", "gear", "Błędy"), ("Live Data", "chart", "Na żywo"),
-        ("Wypadanie zapłonów", "ai", "Zapłony"), ("Adaptacje / lambda", "wrench", "Adaptacje"), ("Log (surowe bajty)", "db", "Log"), ("BMW Expert (moduły DS2)", "roundel", "Moduły"),
-        ("Zawieszenie EHC", "car", "Moduły"), ("Ustawienia", "gear", "Ustawienia"),
-        None, ("Touring Studio", "car", "Tryby mocy"), ("Serwis / Procedury", "wrench", "Serwis"), ("Kodowanie (NCS)", "code", "Kodowanie"),
-        ("Retrofit", "plug", "Retrofit"), ("Mapy ECU", "db", "Mapy"), ("ECU Programowanie", "chip", "Flash"), ("EWS / emisja", "book", "EWS")]
+NAV = [("Home", "home", "home"), ("Auto-diagnoza", "ai", "Smart"), ("Diagnostyka", "gear", "Błędy"), ("Live Data", "chart", "Na żywo"), ("Data Log", "db", "DataLog"),
+       ("Zapłony", "ai", "Zapłony"), ("BMW Expert", "roundel", "Moduły"), ("Touring Studio", "car", "Tryby mocy"), ("Serwis", "wrench", "Serwis"), ("Kodowanie", "code", "Kodowanie"),
+       ("ECU Program.", "chip", "Flash"), ("Raport", "book", "Raport"), ("Dane / Logi", "db", "Log"), ("Ustawienia", "gear", "Ustawienia")]
+SIDE = [("Przegląd", "home", "home"), ("AUTO-DIAGNOZA (Smart Scan)", "ai", "Smart"), ("Identyfikacja DME", "chip", "Identyfikacja"), ("Diagnostyka (błędy DME)", "gear", "Błędy"),
+        ("Pokaż wszystkie DTC", "gear", "WszystkieDTC"), ("Live Data", "chart", "Na żywo"), ("Data Log (wykres + CSV)", "db", "DataLog"),
+        ("Wypadanie zapłonów", "ai", "Zapłony"), ("Adaptacje / lambda", "wrench", "Adaptacje"), ("BMW Expert / Lista sterowników", "roundel", "Moduły"),
+        ("Zawieszenie EHC", "car", "Moduły"), ("Topologia", "plug", "Topologia"), ("Bateria", "chip", "Bateria"), ("VIN Auto", "book", "VIN"),
+        ("Raport", "book", "Raport"), ("Log (surowe bajty)", "db", "Log"), ("Ustawienia / VCI", "gear", "Ustawienia"),
+        None, ("Serwis / Procedury", "wrench", "Serwis"), ("Active tests", "plug", "Testy"), ("Backup ECU", "db", "Backup"), ("Guided", "ai", "Guided"),
+        ("Touring Studio / Stage", "car", "Tryby mocy"), ("Kodowanie (NCS)", "code", "Kodowanie"), ("Retrofit & Tuning", "plug", "Retrofit"), ("Mapy ECU", "db", "Mapy"),
+        ("ECU Programowanie", "chip", "Flash"), ("Katalog SF", "book", "Katalog"), ("Pojazdy", "car", "Pojazdy"), ("AI Mechanic / Chmura", "ai", "AI"),
+        ("Companion", "plug", "Companion"), ("ODX / Sekwencje / UDS", "code", "ODX"), ("VCI / DoIP", "plug", "VCI"), ("LPG", "gear", "LPG"),
+        ("Klapa wydechu", "car", "Wydech"), ("Wirtualna hamownia", "chart", "Hamownia"), ("EWS / emisja", "book", "EWS")]
 
 SHELL_QSS = """
 #Root{background:transparent}
@@ -99,22 +121,66 @@ def fill(t, rows):
             t.setItem(r, c, QTableWidgetItem(("%.2f" % v) if isinstance(v, float) else str(v)))
 
 
+class Chart(QWidget):
+    """Wykres historii wybranego parametru – wyłącznie punkty odebrane z DME."""
+    def __init__(self, owner): super().__init__(); self.o = owner; self.setMinimumHeight(260)
+
+    def paintEvent(self, e):
+        from PySide6.QtGui import QPen
+        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing); r = self.rect().adjusted(50, 12, -12, -24)
+        p.fillRect(self.rect(), QColor(7, 13, 28, 170)); p.setPen(QColor("#2a3a5c")); p.drawRect(r)
+        ys = self.o.hist.get(self.o.dl_param.currentText(), [])
+        if len(ys) < 2:
+            p.setPen(QColor(MUTED)); p.drawText(self.rect(), Qt.AlignCenter, "brak danych – włącz odczyt na żywo (wymaga połączenia z DME)"); return
+        lo, hi = min(ys), max(ys); hi = hi if hi > lo else lo + 1
+        p.setPen(QColor(MUTED)); p.drawText(4, r.top() + 10, "%.1f" % hi); p.drawText(4, r.bottom(), "%.1f" % lo)
+        p.drawText(r.left(), self.height() - 6, "ostatnie %d próbek (co ok. 0,7 s), teraz: %.2f" % (len(ys), ys[-1]))
+        p.setPen(QPen(QColor(CYAN), 2)); n = len(ys); pts = [(r.left() + r.width() * i / (n - 1), r.bottom() - r.height() * (y - lo) / (hi - lo)) for i, y in enumerate(ys)]
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:]): p.drawLine(int(x1), int(y1), int(x2), int(y2))
+
+
+class Topology(QWidget):
+    """Mapa magistrali: moduły jako węzły z kolorem wg wyniku prawdziwego skanu DS2."""
+    def __init__(self): super().__init__(); self.rows = []; self.conn = False; self.setMinimumHeight(260)
+    def set_data(self, conn, rows): self.conn = conn; self.rows = rows; self.update()
+
+    def paintEvent(self, e):
+        p = QPainter(self); p.setRenderHint(QPainter.Antialiasing); W, H = self.width(), self.height(); p.fillRect(self.rect(), QColor(7, 13, 28, 170))
+        nodes = [("DME ME7.2", "0x12", None)] + [(r[0], r[1], r) for r in self.rows] if self.rows else [("DME ME7.2", "0x12", None)] + [(n, "0x%02X" % a, None) for n, a in ds2.MODULES]
+        y = H // 2; p.setPen(QColor(BLUE)); p.drawLine(30, y, W - 30, y); p.drawText(30, y - 8, "K-line (DS2 / KWP2000) – złącze OBD")
+        n = len(nodes); step = (W - 60) / max(n, 1)
+        for i, (name, addr, row) in enumerate(nodes):
+            if row is None and i == 0: col = GREEN if self.conn else "#56607a"
+            elif row is None: col = "#56607a"
+            elif row[2].startswith("—"): col = RED
+            elif row[3].startswith("—") or row[3] in ("(nic)",): col = GREEN
+            else: col = AMBER
+            x = int(30 + step * i + step / 2); yy = y - 70 if i % 2 == 0 else y + 30
+            p.setPen(QColor(col)); p.drawLine(x, y, x, yy + (40 if i % 2 == 0 else 0)); p.setBrush(QColor(col).darker(250))
+            rr = QRect(x - int(step / 2) + 4, yy, int(step) - 8, 40); p.drawRoundedRect(rr, 6, 6); p.setPen(QColor(TXT))
+            p.drawText(rr, Qt.AlignCenter | Qt.TextWordWrap, "%s\n%s" % (name.split(" – ")[0], addr))
+
+
 class Main(QMainWindow):
     def __init__(self):
         super().__init__(); self.setWindowTitle("AutoDiag Pro %s – REALNY odczyt BMW E39 ME7.2 (bez demo)" % VERSION)
         self.setWindowIcon(QIcon(resource("icon.ico"))); self.art = WindowArt()
         self.bus = Bus(); self.bus.done.connect(self.on_done); self.bus.log.connect(self._trace_line); self.bus.upd.connect(self.on_update)
         self.worker = Worker(self.bus); self.tr = None; self.dev = None; self.ident = None; self.faults = None; self.live = {}; self.rough_samples = []
+        self.mod_rows = []; self.dtc_rows = []; self.hist = {}; self.hist_t = []; self.csvlog = None; self.volt_hist = []; self.ff_rows = []; self.vin_rows = []
+        self.settings_path = os.path.join(LOG_DIR, 'settings.txt')
         self.trace_path = os.path.join(LOG_DIR, "trace_%s.txt" % datetime.datetime.now().strftime("%Y%m%d_%H%M%S")); self.dme_btns = []
         root = QWidget(); root.setObjectName("Root"); root.setStyleSheet(Theme.QSS + SHELL_QSS)
         v = QVBoxLayout(root); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(0); v.addWidget(self._top())
-        body = QHBoxLayout(); body.setSpacing(0); sd = QScrollArea(); sd.setWidget(self._side()); sd.setWidgetResizable(True); sd.setFrameShape(QFrame.NoFrame); sd.setFixedWidth(200)
+        body = QHBoxLayout(); body.setSpacing(0); sd = QScrollArea(); sd.setWidget(self._side()); sd.setWidgetResizable(True); sd.setFrameShape(QFrame.NoFrame); sd.setFixedWidth(240)
         sd.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); sd.setStyleSheet("QScrollArea{background:transparent} QScrollArea > QWidget > QWidget{background:transparent} QScrollBar:vertical{width:5px;background:transparent} QScrollBar::handle:vertical{background:#1f6fff;border-radius:2px}")
         body.addWidget(sd)
         self.stack = QStackedWidget(); self.idx = {}
         self._add("home", self._home())
         self._add("Identyfikacja", self._page_ident()); self._add("Błędy", self._page_dtc()); self._add("Na żywo", self._page_live())
         self._add("Zapłony", self._page_mis()); self._add("Adaptacje", self._page_adapt()); self._add("Log", self._page_log()); self._add("Ustawienia", self._page_settings()); self._add("Moduły", self._page_modules())
+        self._add("Smart", self._page_smart()); self._add("WszystkieDTC", self._page_alldtc()); self._add("DataLog", self._page_datalog())
+        self._add("Topologia", self._page_topology()); self._add("Bateria", self._page_battery()); self._add("VIN", self._page_vin()); self._add("Raport", self._page_report())
         for key, (title, why) in DISABLED.items(): self._add(key, self._page_disabled(title, why))
         body.addWidget(self.stack, 1); v.addLayout(body, 1); v.addWidget(self._status()); self.setCentralWidget(root)
         m = self.menuBar(); m.setStyleSheet("QMenuBar{background:rgba(4,8,18,190);color:#d5ddef} QMenu{background:#0d0f24;color:#e8ecff}")
@@ -126,6 +192,7 @@ class Main(QMainWindow):
         self.resize(1600, 960); self.refresh_ports(); self._enable(False); self.go("home"); self.refresh(); self.tick()
         self.log("Start AutoDiag Pro %s – bez trybu demo" % VERSION); self._trace_line("Plik śladu: " + self.trace_path)
         QTimer.singleShot(2500, lambda: self.check_update(False))
+        if self._load_settings().get("autoconnect") == "1" and any("FTDI" in self.port.itemText(i) for i in range(self.port.count())): QTimer.singleShot(800, self.connect)
 
     def paintEvent(self, e):
         p = QPainter(self); p.setRenderHint(QPainter.SmoothPixmapTransform); self.art.paint(p, self.rect(), self.art_target())
@@ -176,7 +243,7 @@ class Main(QMainWindow):
         self.online = QLabel(); self.online.setAlignment(Qt.AlignRight); self.online.setMinimumWidth(92); r.addWidget(self.online); h.addLayout(r); return top
 
     def _side(self):
-        side = QFrame(); side.setObjectName("Side"); side.setFixedWidth(195); v = QVBoxLayout(side); v.setContentsMargins(0, 8, 0, 8); v.setSpacing(1); self.sidebtn = []
+        side = QFrame(); side.setObjectName("Side"); side.setFixedWidth(235); v = QVBoxLayout(side); v.setContentsMargins(0, 8, 0, 8); v.setSpacing(1); self.sidebtn = []
         for item in SIDE:
             if item is None:
                 l = QLabel("WYŁĄCZONE – dlaczego?"); l.setObjectName("SideSep"); v.addWidget(l); continue
@@ -311,15 +378,10 @@ class Main(QMainWindow):
     def _page_ident(self):
         self.t_id = table(["Pole", "Wartość z DME"]); return self._page("Identyfikacja DME", "komenda A2", self.t_id, [("Czytaj identyfikację", self.read_ident, True)])
 
-    def _page_dtc(self):
-        self.t_dtc = table(["Kod BMW (hex)", "Status (hex)", "Status (bity)"]); self.dtc_info = QLabel("")
-        return self._page("Diagnostyka – pamięć błędów", "18 02 FF FF / kasowanie 14 FF 00", self.t_dtc,
-                          [("Czytaj błędy", self.read_dtc, True), ("Kasuj błędy…", self.clear_dtc, True)], self.dtc_info)
-
     def _page_live(self):
         self.t_live = table(["Parametr", "Wartość", "Jednostka"]); self.b_live = QPushButton("▶  Start odczytu na żywo"); self.b_live.setCheckable(True)
         self.b_live.toggled.connect(self.toggle_live)
-        return self._page("Live Data", "22 40 00 – co 0,7 s", self.t_live, [("Odczytaj raz", self.read_live, True)], extra=self.b_live)
+        return self._page("Live Data", "22 40 00 – co 0,7 s", self.t_live, [("Odczytaj raz", self.read_live, True), ("Eksport CSV…", lambda: self.export_csv(self.t_live, "live"), False)], extra=self.b_live)
 
     def _page_mis(self):
         self.t_mis = table(["Cylinder (pozycja w DME)", "Ostatnia nierówność [1/s]", "Średnia [1/s]", "z-score"])
@@ -329,18 +391,18 @@ class Main(QMainWindow):
 
     def _page_adapt(self):
         self.t_ad = table(["Parametr", "Wartość", "Jednostka"])
-        return self._page("Adaptacje / lambda", "22 40 04 · 22 40 07", self.t_ad, [("Czytaj adaptacje", self.read_adapt, True), ("Czytaj status lambda", self.read_lambda, True)])
+        return self._page("Adaptacje / lambda", "22 40 04 · 22 40 07", self.t_ad, [("Czytaj adaptacje", self.read_adapt, True), ("Czytaj status lambda", self.read_lambda, True), ("Eksport CSV…", lambda: self.export_csv(self.t_ad, "adaptacje"), False)])
 
     def _page_log(self):
         self.logbox = QPlainTextEdit(); self.logbox.setReadOnly(True)
         return self._page("Log", "wszystkie wysłane i odebrane bajty", self.logbox, [("Zapisz log do pliku…", self.save_log, False)])
 
     def _page_modules(self):
-        self.t_mod = table(["Moduł", "Adres DS2", "Identyfikacja (00) – surowe bajty", "Pamięć błędów (04) – surowe bajty"])
+        self.t_mod = table(["Moduł", "Adres DS2", "Identyfikacja (00) – surowe bajty", "Pamięć błędów (04) – surowe bajty", "Identyfikacja – tekst"])
         info = QLabel("Prawdziwy odczyt DS2 po K-line, tylko odczyt (nic nie jest zapisywane ani kasowane). Bajty pokazane surowo – "
                       "znaczenie kodów sprawdź w INPA. Moduł bez odpowiedzi = nie ma go w aucie albo jest na innej linii. Wymaga połączenia (Połącz z DME).")
         return self._page("BMW Expert – inne moduły", "DS2: EGS · ABS/ASC · Airbag · IKE · LCM · EHC · IHKA · GM", self.t_mod,
-                          [("Skanuj wszystkie moduły", self.scan_modules, True)], info)
+                          [("Skanuj wszystkie moduły", self.scan_modules, True), ("Eksport CSV…", lambda: self.export_csv(self.t_mod, "moduly"), False)], info)
 
     def scan_modules(self):
         link = self.tr.link if self.tr else None
@@ -355,7 +417,11 @@ class Main(QMainWindow):
         pn = Panel("Program", BLUE, "– wersja %s" % VERSION)
         for text, fn in (("Sprawdź aktualizacje", lambda: self.check_update(True)), ("Przywróć poprzednią wersję…", self.rollback), ("O programie", self.about)):
             b = QPushButton(text); b.setObjectName("Ghost"); b.clicked.connect(fn); pn.l.addWidget(b)
-        v.addWidget(pn); v.addStretch(); return p
+        v.addWidget(pn)
+        pn = Panel("Połączenie / VCI", BLUE, "– kabel K+DCAN"); self.cb_auto = QCheckBox("Łącz automatycznie z DME po starcie, jeśli wykryto kabel FTDI")
+        self.cb_auto.setChecked(self._load_settings().get("autoconnect") == "1"); self.cb_auto.toggled.connect(lambda on: self._save_setting("autoconnect", "1" if on else "0")); pn.l.addWidget(self.cb_auto)
+        pn.l.addWidget(QLabel("<span style='color:#8d9ab3'>Port COM wybierasz na stronie Przegląd (przycisk Odśwież). Tylko kabel K+DCAN – J2534/DoIP nie dotyczą E39.</span>")); v.addWidget(pn)
+        v.addStretch(); return p
 
     def _page_disabled(self, title, why):
         p = QWidget(); v = QVBoxLayout(p); v.setContentsMargins(40, 30, 40, 30)
@@ -473,22 +539,24 @@ class Main(QMainWindow):
         if name == "connect":
             self.tr, self.ident = res; self.dev = me72.Me72(self.tr); self._enable(True); fill(self.t_id, list(self.ident.items()))
             self.log("Połączono z DME: %s" % self.ident.get("Numer części BMW", "?"))
-        elif name == "modules": fill(self.t_mod, res); self.log("Skan modułów DS2: %d odpowiedziało" % sum(1 for r in res if not r[2].startswith("—")))
+        elif name == "modules": res = [r + [extras.ds2_ident_text(bytes.fromhex(r[2].replace(" ", ""))) if not r[2].startswith("—") and r[2] != "(nic)" else "—"] for r in res]; self.mod_rows = res; fill(self.t_mod, res); self._modules_done(res); self.log("Skan modułów DS2: %d odpowiedziało" % sum(1 for r in res if not r[2].startswith("—")))
         elif name == "ident": self.ident = res; fill(self.t_id, list(res.items()))
         elif name == "dtc":
             count, recs, warn = res; self.faults = recs
-            fill(self.t_dtc, [("%04X" % c, "%02X" % s, format(s, "08b")) for c, s in recs])
+            self.dtc_rows = [("%04X" % c, "%02X" % s, format(s, "08b")) for c, s in recs]; fill(self.t_dtc, self.dtc_rows); self._alldtc_refresh()
             self.dtc_info.setText((("DME zgłasza %d błędów. " % count) + " ".join(warn) + " Kody BMW (nie P-kody OBD) – znaczenie sprawdź w INPA. "
                                    "Format odpowiedzi niepotwierdzony na tym aucie.") if count else "DME odpowiedziało: brak zapisanych błędów.")
             self.log("Odczyt błędów: %d" % count)
         elif name == "clear": self.dtc_info.setText("DME potwierdziło kasowanie (54). Odczytuję ponownie…"); self.log("Kasowanie błędów potwierdzone"); self.read_dtc()
         elif name == "live":
-            self._live_failed = False; fill(self.t_live, res); self.live = {n: x for n, x, _ in res}
+            self._live_failed = False; fill(self.t_live, res); self.live = {n: x for n, x, _ in res}; self._record(res)
             for key, (val, sp, unit, col) in self.live_tiles.items():
                 x = self.live.get(key)
                 if x is None: val.setText("—"); continue
                 val.setText("<b style='font-size:15pt;color:%s'>%s</b> <span style='color:#8d9ab3'>%s</span>" % (col, ("%.0f" % x) if abs(x) >= 100 else ("%.1f" % x), unit)); sp.push(x)
-        elif name in ("adapt", "lambda"): fill(self.t_ad, res)
+        elif name in ("adapt", "lambda"): fill(self.t_ad, res); setattr(self, "ad_rows_" + name, res)
+        elif name == "ff": self.ff_rows = res; fill(self.t_ff, res); self.log("Szczegóły błędu %s odczytane" % res[0][1])
+        elif name == "smart": self._smart_done(res)
         elif name == "rough":
             self.rough_samples += res; mean, z, idx, txt = me72.roughness_outlier(self.rough_samples); last = res[-1]
             fill(self.t_mis, [("%d%s" % (c + 1, "  ◄ ODSTAJE" if idx == c else ""), last[c], mean[c], "—" if z[c] is None else z[c]) for c in range(8)])
@@ -504,8 +572,159 @@ class Main(QMainWindow):
         if name == "live":
             self._live_failed = True; self.live = {}; self.toggle_live(False); fill(self.t_live, [("—", NO_DME, "")])
         if name == "connect": self.dev = None
+        if name == "smart": self.smart_info.setText("Przerwano: %s" % msg)
         self.refresh()
         QMessageBox.warning(self, NO_DME if isinstance(err, me72.NoResponse) else "Błąd", msg)
+
+
+    # ------------------------------------------------ 1.3: strony przeniesione ze starego AutoDiag Pro (tylko prawdziwe odczyty)
+    def export_csv(self, t, name):
+        if t.rowCount() == 0: QMessageBox.information(self, "Eksport CSV", "Tabela jest pusta – najpierw odczytaj dane z auta."); return
+        p, _ = QFileDialog.getSaveFileName(self, "Eksport CSV", os.path.join(LOG_DIR, "%s_%s.csv" % (name, time.strftime("%Y%m%d_%H%M%S"))), "CSV (*.csv)")
+        if not p: return
+        hd = [t.horizontalHeaderItem(c).text() for c in range(t.columnCount())]
+        rows = [[(t.item(r, c).text() if t.item(r, c) else "") for c in range(t.columnCount())] for r in range(t.rowCount())]
+        extras.export_table_csv(p, hd, rows); self.log("Zapisano CSV: %s" % p)
+
+    def read_ff(self):
+        r = self.t_dtc.currentRow()
+        if r < 0 or not self.faults: QMessageBox.information(self, "Szczegóły błędu", "Najpierw odczytaj błędy i zaznacz jeden w tabeli."); return
+        code = self.faults[r][0]; self.run("ff", lambda: self.dev.freeze_frame(code))
+
+    def _page_dtc(self):
+        w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(0, 0, 0, 0)
+        self.t_dtc = table(["Kod BMW (hex)", "Status (hex)", "Status (bity)"]); self.dtc_info = QLabel(""); v.addWidget(self.t_dtc, 2)
+        v.addWidget(QLabel("<b>Szczegóły zaznaczonego błędu (freeze frame, 17 HH LL)</b>")); self.t_ff = table(["Pole", "Wartość z DME"]); v.addWidget(self.t_ff, 1)
+        return self._page("Diagnostyka – pamięć błędów", "18 02 FF FF · szczegóły 17 · kasowanie 14 FF 00", w,
+                          [("Czytaj błędy", self.read_dtc, True), ("Szczegóły błędu (freeze frame)", self.read_ff, True), ("Eksport CSV…", lambda: self.export_csv(self.t_dtc, "bledy_dme"), False),
+                           ("Kasuj błędy…", self.clear_dtc, True)], self.dtc_info)
+
+    # --- wszystkie DTC
+    def _page_alldtc(self):
+        self.t_all = table(["Sterownik", "Adres", "Błędy (odczyt)"]); self.all_info = QLabel("Zbiera błędy DME (KWP) i wszystkich modułów DS2. Kody DS2 surowe – znaczenie w INPA.")
+        return self._page("Pokaż wszystkie DTC", "DME + EGS · ABS · Airbag · IKE · LCM · EHC · IHKA · GM", self.t_all,
+                          [("Czytaj wszystkie", self.read_all_dtc, True), ("Eksport CSV…", lambda: self.export_csv(self.t_all, "wszystkie_dtc"), False)], self.all_info)
+
+    def read_all_dtc(self): self.read_dtc(); self.scan_modules()
+
+    def _alldtc_refresh(self):
+        rows = [("Silnik (DME ME7.2)", "0x12", ("brak błędów" if not self.dtc_rows else ", ".join("%s/%s" % (c, s) for c, s, _ in self.dtc_rows)) if self.faults is not None else "—")]
+        rows += [(r[0], r[1], r[3]) for r in self.mod_rows]; fill(self.t_all, rows)
+
+    def _modules_done(self, res):
+        self._alldtc_refresh(); self.topo.set_data(self.dev is not None, res)
+
+    # --- Smart Scan / auto-diagnoza
+    def _page_smart(self):
+        self.t_smart = table(["Krok", "Wynik"]); self.smart_info = QLabel("Jedno kliknięcie: identyfikacja DME, pamięć błędów, dane na żywo, adaptacje, skan wszystkich modułów DS2, potem raport. Wymaga połączenia.")
+        return self._page("AUTO-DIAGNOZA (Smart Scan)", "prawdziwe odczyty po kolei", self.t_smart,
+                          [("Start auto-diagnozy", self.smart_scan, True), ("Otwórz raport", self.make_report, False)], self.smart_info)
+
+    def smart_scan(self):
+        link = self.tr.link if self.tr else None; dev = self.dev; tr = self.trace
+        def job():
+            out = {}
+            for key, fn in (("ident", dev.ident), ("dtc", dev.read_faults), ("live", dev.engine), ("adapt", dev.adaptations), ("lambda", dev.lambda_status),
+                            ("modules", lambda: ds2.Ds2(link, tr).scan())):
+                try: out[key] = (fn(), None)
+                except Exception as e: out[key] = (None, str(e))
+            return out
+        self.smart_info.setText("Trwa auto-diagnoza… (ok. 20–40 s)"); self.run("smart", job)
+
+    def _smart_done(self, out):
+        names = {"ident": "Identyfikacja DME", "dtc": "Pamięć błędów DME", "live": "Dane na żywo", "adapt": "Adaptacje", "lambda": "Status lambda", "modules": "Moduły DS2"}
+        rows = []
+        for k, (res, err) in out.items():
+            if err: rows.append((names[k], "BŁĄD: " + err.split(".")[0])); continue
+            if k in ("ident", "dtc", "live", "adapt", "lambda", "modules"): self.on_done(k, res, None)
+            if k == "dtc": rows.append((names[k], "%d błędów" % res[0]))
+            elif k == "modules": rows.append((names[k], "%d z %d odpowiedziało" % (sum(1 for r in res if not r[2].startswith("—")), len(res))))
+            else: rows.append((names[k], "OK – %d pozycji" % len(res)))
+        fill(self.t_smart, rows); self.smart_info.setText("Auto-diagnoza zakończona. Raport: przycisk „Otwórz raport”."); self.log("Auto-diagnoza zakończona")
+
+    # --- Data Log: wykres + zapis CSV
+    def _page_datalog(self):
+        w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(0, 0, 0, 0); r = QHBoxLayout()
+        r.addWidget(QLabel("Parametr:")); self.dl_param = QComboBox(); self.dl_param.addItems([n for n, _, _ in [("Obroty", 0, 0), ("Temp. płynu chłodzącego", 0, 0), ("Temp. powietrza dolotowego", 0, 0),
+                    ("Prędkość", 0, 0), ("Czas wtrysku", 0, 0), ("Kąt wyprzedzenia zapłonu", 0, 0), ("Przepustnica", 0, 0), ("Masa powietrza (MAF)", 0, 0), ("Moment wskazany", 0, 0), ("Napięcie akumulatora (DME)", 0, 0)]])
+        self.dl_param.currentTextChanged.connect(lambda _: self.chart.update()); r.addWidget(self.dl_param, 1); v.addLayout(r)
+        self.chart = Chart(self); v.addWidget(self.chart, 1)
+        self.b_rec = QPushButton("●  Nagrywaj do CSV"); self.b_rec.setCheckable(True); self.b_rec.toggled.connect(self.toggle_rec)
+        self.dl_info = QLabel("Wykres i zapis działają, gdy włączony jest odczyt na żywo (Live Data, co 0,7 s). Plik CSV (Excel, separator ;) w folderze %s." % LOG_DIR)
+        return self._page("Data Log", "wykres + zapis CSV z 22 40 00", w, [("▶ Włącz odczyt na żywo", lambda: self.b_live.setChecked(True), True), ("Wyczyść wykres", self.clear_hist, False)], self.dl_info, extra=self.b_rec)
+
+    def clear_hist(self): self.hist = {}; self.hist_t = []; self.chart.update()
+
+    def toggle_rec(self, on):
+        if on:
+            path = os.path.join(LOG_DIR, "datalog_%s.csv" % time.strftime("%Y%m%d_%H%M%S")); self.csvlog = extras.CsvLogger(path)
+            self.b_rec.setText("■  Stop nagrywania"); self.dl_info.setText("Nagrywam do %s" % path); self.b_live.setChecked(True); self.log("Start nagrywania CSV")
+        elif self.csvlog:
+            self.csvlog.close(); self.dl_info.setText("Zapisano %d wierszy do %s" % (self.csvlog.rows, self.csvlog.path)); self.log("Zapisano CSV: %d wierszy" % self.csvlog.rows)
+            self.csvlog = None; self.b_rec.setText("●  Nagrywaj do CSV")
+
+    def _record(self, res):
+        self.hist_t.append(time.time())
+        for n, x, _ in res: self.hist.setdefault(n, []).append(x)
+        if len(self.hist_t) > 900:
+            self.hist_t = self.hist_t[-900:]; self.hist = {k: vv[-900:] for k, vv in self.hist.items()}
+        v = self.live.get("Napięcie akumulatora (DME)")
+        if v is not None: self.volt_hist.append((time.strftime("%H:%M:%S"), v)); self._battery_refresh()
+        if self.csvlog: self.csvlog.add(res)
+        self.chart.update()
+
+    # --- Topologia
+    def _page_topology(self):
+        self.topo = Topology(); info = QLabel("Zielony = moduł odpowiedział, pomarańczowy = ma błędy w pamięci, czerwony = brak odpowiedzi, szary = nie skanowano. Dane z ostatniego skanu DS2.")
+        return self._page("Topologia", "K-line (DS2/KWP) – moduły E39", self.topo, [("Skanuj moduły", self.scan_modules, True)], info)
+
+    # --- Bateria
+    def _page_battery(self):
+        self.t_bat = table(["Czas", "Napięcie z DME [V]"]); self.bat_info = QLabel("Napięcie zasilania mierzone przez DME (bajt 25 odpowiedzi 22 40 00). Silnik wył.: 12,4–12,7 V = OK; pracuje: 13,8–14,6 V = ładowanie OK.")
+        return self._page("Bateria", "napięcie z DME", self.t_bat, [("Odczytaj teraz", self.read_live, True), ("Eksport CSV…", lambda: self.export_csv(self.t_bat, "bateria"), False)], self.bat_info)
+
+    def _battery_refresh(self):
+        rows = list(reversed(self.volt_hist[-200:])); fill(self.t_bat, rows); v = rows[0][1]
+        ocena = "niskie – naładuj akumulator" if v < 12.2 else ("OK (silnik wyłączony)" if v < 13.2 else ("ładowanie OK" if v <= 14.8 else "za wysokie – sprawdź regulator alternatora"))
+        self.bat_info.setText("Ostatni odczyt: <b>%.2f V</b> – %s. (Bez pomiaru prądu – stan zdrowia akumulatora wymaga testera obciążeniowego.)" % (v, ocena))
+
+    # --- VIN
+    def _page_vin(self):
+        w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(0, 0, 0, 0); self.vin_edit = QLineEdit(); self.vin_edit.setPlaceholderText("Wpisz VIN (17 znaków) z dowodu rejestracyjnego lub z szyby")
+        v.addWidget(self.vin_edit); self.t_vin = table(["Pole", "Wartość"]); v.addWidget(self.t_vin, 1)
+        info = QLabel("Dekodowanie wpisanego VIN. Odczyt VIN z DME ME7.2 jest wyłączony: nie znamy potwierdzonej komendy dla tego sterownika.")
+        return self._page("VIN Auto", "dekodowanie numeru nadwozia", w, [("Dekoduj", self.decode_vin, False)], info)
+
+    def decode_vin(self):
+        try: self.vin_rows = extras.decode_vin(self.vin_edit.text()); fill(self.t_vin, self.vin_rows)
+        except ValueError as e: QMessageBox.warning(self, "VIN", str(e))
+
+    # --- Raport
+    def _page_report(self):
+        self.rep_info = QLabel("Raport HTML (otwiera się w przeglądarce, można wydrukować do PDF) – tylko dane odczytane z auta w tej sesji.")
+        box = QPlainTextEdit(); box.setReadOnly(True); self.rep_box = box
+        return self._page("Raport", "eksport HTML / PDF przez przeglądarkę", box, [("Utwórz raport", self.make_report, False)], self.rep_info)
+
+    def make_report(self):
+        sec = [("Identyfikacja DME", ["Pole", "Wartość"], list((self.ident or {}).items())), ("Pamięć błędów DME", ["Kod BMW", "Status", "Bity"], self.dtc_rows),
+               ("Szczegóły błędu", ["Pole", "Wartość"], self.ff_rows), ("Dane na żywo (ostatni odczyt)", ["Parametr", "Wartość"], list(self.live.items())),
+               ("Adaptacje", ["Parametr", "Wartość", "Jedn."], getattr(self, "ad_rows_adapt", [])), ("Status lambda", ["Parametr", "Wartość", ""], getattr(self, "ad_rows_lambda", [])),
+               ("Moduły DS2", ["Moduł", "Adres", "Ident (hex)", "Błędy (hex)", "Ident (tekst)"], self.mod_rows),
+               ("Wypadanie zapłonów (średnie)", ["Cylinder (pozycja DME)", "Średnia [1/s]"], [(c + 1, m) for c, m in enumerate(me72.roughness_outlier(self.rough_samples)[0])] if self.rough_samples else []),
+               ("VIN", ["Pole", "Wartość"], self.vin_rows)]
+        path = os.path.join(LOG_DIR, "raport_%s.html" % time.strftime("%Y%m%d_%H%M%S")); open(path, "w", encoding="utf-8").write(extras.report_html(sec))
+        self.rep_box.setPlainText("Zapisano: %s" % path); self.log("Raport: %s" % path)
+        try: os.startfile(path)
+        except Exception: pass
+
+    # --- ustawienia: autołączenie
+    def _load_settings(self):
+        try: return dict(l.rstrip("\n").split("=", 1) for l in open(self.settings_path, encoding="utf-8") if "=" in l)
+        except Exception: return {}
+
+    def _save_setting(self, k, val):
+        d = self._load_settings(); d[k] = val
+        open(self.settings_path, "w", encoding="utf-8").write("".join("%s=%s\n" % kv for kv in d.items()))
 
     # ------------------------------------------------ aktualizacje programu (nigdy nie dotyczą sterownika auta)
     def _bg(self, stage, fn, manual):

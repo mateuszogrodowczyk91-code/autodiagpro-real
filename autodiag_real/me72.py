@@ -245,6 +245,10 @@ class Me72:
     def lambda_status(self): return decode_lambda_status(self.t.request([0x22, 0x40, 0x07]))
     def read_faults(self): return decode_dtc(self.t.request(READ_DTC))
 
+    def freeze_frame(self, code):
+        from .extras import freeze_frame_cmd, decode_freeze_frame
+        return decode_freeze_frame(self.t.request(freeze_frame_cmd(code)), code)
+
     def clear_faults(self):
         d = self.t.request(CLEAR_DTC)
         if d[:1] != b"\x54": raise ProtocolError("DME nie potwierdziło kasowania: %s" % hexs(d))
