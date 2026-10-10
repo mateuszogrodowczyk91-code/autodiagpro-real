@@ -2,16 +2,16 @@
 Każda wartość na ekranie pochodzi z odpowiedzi DME. Gdy jej nie ma: „brak odpowiedzi z DME” albo „—”. Brak trybu demo."""
 import datetime, os, queue, sys, threading, time
 from PySide6.QtCore import Qt, QObject, Signal, QTimer
-from PySide6.QtGui import QIcon, QAction, QColor
+from PySide6.QtGui import QIcon, QAction, QColor, QPainter
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QComboBox, QLabel,
-    QTableWidget, QTableWidgetItem, QHeaderView, QPlainTextEdit, QMessageBox, QFileDialog, QStackedWidget, QFrame, QSizePolicy, QAbstractItemView)
+    QTableWidget, QTableWidgetItem, QHeaderView, QPlainTextEdit, QMessageBox, QFileDialog, QStackedWidget, QFrame, QSizePolicy, QAbstractItemView, QScrollArea)
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from autodiag_real import me72, updater
 from autodiag_real.version import VERSION
 from autodiag_real.ui.theme import Theme
-from autodiag_real.ui.widgets import glow, Panel, Ring, Spark, Bar, Icon, MStripe, Hero, RED, BLUE, CYAN, GREEN, AMBER, TXT, MUTED
+from autodiag_real.ui.widgets import glow, Panel, Ring, Spark, Bar, Icon, MStripe, Hero, WindowArt, RED, BLUE, CYAN, GREEN, AMBER, TXT, MUTED
 
 NO_DME = "brak odpowiedzi z DME"
 LOG_DIR = os.path.join(os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "AutoDiagPro_real")
@@ -45,18 +45,19 @@ SIDE = [("Przegląd", "home", "home"), ("Identyfikacja DME", "chip", "Identyfika
         ("Retrofit", "plug", "Retrofit"), ("Mapy ECU", "db", "Mapy"), ("ECU Programowanie", "chip", "Flash"), ("EWS / emisja", "book", "EWS")]
 
 SHELL_QSS = """
-#Top{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #0b1428,stop:1 #050912);border-bottom:2px solid rgba(63,169,255,220)}
-#NavBtn{background:rgba(10,18,36,200);border:1px solid rgba(31,111,255,70);border-radius:6px}
+#Root{background:transparent}
+#Top{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 rgba(8,14,30,200),stop:1 rgba(4,8,18,175));border-bottom:1px solid rgba(63,169,255,200)}
+#NavBtn{background:rgba(10,18,36,170);border:1px solid rgba(31,111,255,70);border-radius:6px}
 #NavBtn:checked{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #2f7fff,stop:1 #0b3d99);border:2px solid #8cc6ff}
-#Side{background:rgba(4,8,18,240);border-right:2px solid rgba(255,35,64,170)}
+#Side{background:rgba(4,8,18,170);border-right:1px solid rgba(255,35,64,170);border-top-right-radius:10px}
 #SideBtn{background:transparent;border:none;border-left:3px solid transparent;border-radius:0;text-align:left;padding:8px 10px;font-size:10pt;font-weight:500;color:#d5ddef}
 #SideBtn:hover{background:rgba(31,111,255,40)}
 #SideBtn:checked{background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(255,35,64,110),stop:1 rgba(255,35,64,0));border-left:3px solid #ff2340;color:#fff;font-weight:700}
 #SideSep{color:#8d9ab3;font-size:7.5pt;letter-spacing:2px;padding:6px 12px 2px 12px}
-#VCard{background:rgba(5,10,22,225);border:2px solid rgba(63,169,255,230);border-radius:8px}
-#Tile{background:rgba(6,12,26,225);border:2px solid rgba(63,169,255,230);border-radius:8px}
-#TileRed{background:rgba(26,6,10,225);border:2px solid #ff2340;border-radius:8px}
-#Status{background:#050912;border-top:1px solid rgba(31,111,255,110)}
+#VCard{background:rgba(5,10,22,185);border:2px solid rgba(63,169,255,230);border-radius:8px}
+#Tile{background:rgba(6,12,26,170);border:2px solid rgba(63,169,255,230);border-radius:8px}
+#TileRed{background:rgba(26,6,10,175);border:2px solid #ff2340;border-radius:8px}
+#Status{background:rgba(4,8,18,200);border-top:1px solid rgba(31,111,255,110)}
 #Status QLabel{font-size:8.5pt;color:#d5ddef}
 """
 
@@ -101,20 +102,22 @@ def fill(t, rows):
 class Main(QMainWindow):
     def __init__(self):
         super().__init__(); self.setWindowTitle("AutoDiag Pro %s – REALNY odczyt BMW E39 ME7.2 (bez demo)" % VERSION)
-        self.setWindowIcon(QIcon(resource("icon.ico")))
+        self.setWindowIcon(QIcon(resource("icon.ico"))); self.art = WindowArt()
         self.bus = Bus(); self.bus.done.connect(self.on_done); self.bus.log.connect(self._trace_line); self.bus.upd.connect(self.on_update)
         self.worker = Worker(self.bus); self.tr = None; self.dev = None; self.ident = None; self.faults = None; self.live = {}; self.rough_samples = []
         self.trace_path = os.path.join(LOG_DIR, "trace_%s.txt" % datetime.datetime.now().strftime("%Y%m%d_%H%M%S")); self.dme_btns = []
         root = QWidget(); root.setObjectName("Root"); root.setStyleSheet(Theme.QSS + SHELL_QSS)
         v = QVBoxLayout(root); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(0); v.addWidget(self._top())
-        body = QHBoxLayout(); body.setSpacing(0); body.addWidget(self._side())
+        body = QHBoxLayout(); body.setSpacing(0); sd = QScrollArea(); sd.setWidget(self._side()); sd.setWidgetResizable(True); sd.setFrameShape(QFrame.NoFrame); sd.setFixedWidth(215)
+        sd.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); sd.setStyleSheet("QScrollArea{background:transparent} QScrollArea > QWidget > QWidget{background:transparent} QScrollBar:vertical{width:5px;background:transparent} QScrollBar::handle:vertical{background:#1f6fff;border-radius:2px}")
+        body.addWidget(sd)
         self.stack = QStackedWidget(); self.idx = {}
         self._add("home", self._home())
         self._add("Identyfikacja", self._page_ident()); self._add("Błędy", self._page_dtc()); self._add("Na żywo", self._page_live())
         self._add("Zapłony", self._page_mis()); self._add("Adaptacje", self._page_adapt()); self._add("Log", self._page_log()); self._add("Ustawienia", self._page_settings())
         for key, (title, why) in DISABLED.items(): self._add(key, self._page_disabled(title, why))
         body.addWidget(self.stack, 1); v.addLayout(body, 1); v.addWidget(self._status()); self.setCentralWidget(root)
-        m = self.menuBar(); m.setStyleSheet("QMenuBar{background:#050912;color:#d5ddef} QMenu{background:#0d0f24;color:#e8ecff}")
+        m = self.menuBar(); m.setStyleSheet("QMenuBar{background:rgba(4,8,18,190);color:#d5ddef} QMenu{background:#0d0f24;color:#e8ecff}")
         mp = m.addMenu("Pomoc")
         for text, fn in (("Sprawdź aktualizacje", lambda: self.check_update(True)), ("Przywróć poprzednią wersję…", self.rollback), ("O programie", self.about)):
             a = QAction(text, self); a.triggered.connect(fn); mp.addAction(a)
@@ -124,6 +127,24 @@ class Main(QMainWindow):
         self.log("Start AutoDiag Pro %s – bez trybu demo" % VERSION); self._trace_line("Plik śladu: " + self.trace_path)
         QTimer.singleShot(2500, lambda: self.check_update(False))
 
+    def paintEvent(self, e):
+        p = QPainter(self); p.setRenderHint(QPainter.SmoothPixmapTransform); self.art.paint(p, self.rect())
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e); self._fit_top()
+
+    def _fit_top(self):
+        """Poniżej ~1200 px szerokości: górne menu same ikony (podpis w dymku), niższy pasek."""
+        if not hasattr(self, "nav_scroll"): return
+        compact = self.width() < 1200
+        if compact == self._compact: return
+        self._compact = compact
+        for _, b in self.nav:
+            b._lb.setVisible(not compact); b.setFixedSize(*((40, 40) if compact else (74, 64)))
+            b._bl.setContentsMargins(*((2, 2, 2, 2) if compact else (2, 7, 2, 4)))
+        self.top.setFixedHeight(56 if compact else 80); self.nav_scroll.setFixedHeight(46 if compact else 70)
+        self.logo_lbl.setVisible(not compact)
+
     # ------------------------------------------------ budowa interfejsu
     def _add(self, key, w): self.idx[key] = self.stack.count(); self.stack.addWidget(w)
 
@@ -132,19 +153,24 @@ class Main(QMainWindow):
         h.addWidget(Icon("chip", "#3fa9ff", 44))
         h.addWidget(QLabel("<div style='line-height:95%'><span style='font-size:21pt;font-weight:900;color:#ff3b55'>Auto</span><span style='font-size:21pt;font-weight:900;color:#2b8cff'>Diag</span>"
                            "<span style='font-size:21pt;font-weight:300'> PRO</span><br><span style='font-size:9pt;font-weight:300;letter-spacing:4px'>DIAGNOSTICS</span><br>"
-                           "<span style='font-size:7pt;color:#8d9ab3'>BMW E39 • ME7.2 • K+DCAN</span></div>")); h.addSpacing(10); self.nav = []
+                           "<span style='font-size:7pt;color:#8d9ab3'>BMW E39 • ME7.2 • K+DCAN</span></div>")); h.addSpacing(6); self.nav = []
+        navw = QWidget(); navl = QHBoxLayout(navw); navl.setContentsMargins(0, 0, 0, 0); navl.setSpacing(4)
         for n, ic, target in NAV:
-            b = QPushButton(); b.setObjectName("NavBtn"); b.setCheckable(True); b.setMinimumSize(80, 66)
+            b = QPushButton(); b.setObjectName("NavBtn"); b.setCheckable(True); b.setFixedSize(74, 64)
             bl = QVBoxLayout(b); bl.setContentsMargins(2, 7, 2, 4); bl.setSpacing(3); iw = Icon(ic, "#ffffff" if target not in DISABLED else "#56607a", 24); bl.addWidget(iw, 0, Qt.AlignHCenter)
             lb = QLabel(n.upper()); lb.setAlignment(Qt.AlignCenter); lb.setWordWrap(True); lb.setStyleSheet("font-size:6.5pt;font-weight:700;color:%s" % ("#fff" if target not in DISABLED else "#7a8296")); bl.addWidget(lb)
             for x in (iw, lb): x.setAttribute(Qt.WA_TransparentForMouseEvents)
-            b.clicked.connect(lambda _, t=target: self.go(t)); h.addWidget(b); self.nav.append((target, b)); glow(b, "#1f6fff", 16, 150)
-        h.addStretch(); ms = MStripe(4); ms.setFixedWidth(40); h.addWidget(ms); h.addSpacing(8)
-        r = QVBoxLayout(); self.clock = QLabel(); self.clock.setAlignment(Qt.AlignRight); r.addWidget(self.clock)
-        self.online = QLabel(); self.online.setAlignment(Qt.AlignRight); r.addWidget(self.online); h.addLayout(r); return top
+            b.setToolTip(n); b._lb = lb; b._bl = bl
+            b.clicked.connect(lambda _, t=target: self.go(t)); navl.addWidget(b); self.nav.append((target, b)); glow(b, "#1f6fff", 16, 150)
+        navl.addStretch(); ns = QScrollArea(); ns.setWidget(navw); ns.setWidgetResizable(True); ns.setFrameShape(QFrame.NoFrame); ns.setFixedHeight(70); self.top = top; self.nav_scroll = ns; self.logo_lbl = h.itemAt(1).widget(); self._compact = None
+        ns.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff); ns.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded); ns.setMinimumWidth(200)
+        ns.setStyleSheet("QScrollArea{background:transparent} QScrollArea > QWidget > QWidget{background:transparent} QScrollBar:horizontal{height:5px;background:transparent} QScrollBar::handle:horizontal{background:#1f6fff;border-radius:2px}")
+        h.addWidget(ns, 1); ms = MStripe(4); ms.setFixedWidth(40); h.addWidget(ms); h.addSpacing(8)
+        r = QVBoxLayout(); r.setSpacing(0); r.setContentsMargins(0, 0, 0, 0); self.clock = QLabel(); self.clock.setAlignment(Qt.AlignRight); self.clock.setMinimumWidth(92); r.addWidget(self.clock)
+        self.online = QLabel(); self.online.setAlignment(Qt.AlignRight); self.online.setMinimumWidth(92); r.addWidget(self.online); h.addLayout(r); return top
 
     def _side(self):
-        side = QFrame(); side.setObjectName("Side"); side.setFixedWidth(215); v = QVBoxLayout(side); v.setContentsMargins(0, 8, 0, 8); v.setSpacing(1); self.sidebtn = []
+        side = QFrame(); side.setObjectName("Side"); side.setFixedWidth(210); v = QVBoxLayout(side); v.setContentsMargins(0, 8, 0, 8); v.setSpacing(1); self.sidebtn = []
         for item in SIDE:
             if item is None:
                 l = QLabel("WYŁĄCZONE (bezpieczeństwo)"); l.setObjectName("SideSep"); v.addWidget(l); continue
@@ -157,30 +183,34 @@ class Main(QMainWindow):
         return side
 
     def _conn_row(self):
-        h = QHBoxLayout(); self.port = QComboBox(); self.port.setMinimumWidth(260)
+        h = QGridLayout(); h.setHorizontalSpacing(6); h.setVerticalSpacing(6); self.port = QComboBox(); self.port.setMinimumWidth(150)
+        self.port.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon); self.port.setMinimumContentsLength(14)
+        self.port.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         b_ref = QPushButton("Odśwież"); b_ref.setObjectName("Ghost"); b_ref.clicked.connect(self.refresh_ports)
         self.b_conn = QPushButton("Połącz z DME"); self.b_conn.clicked.connect(self.connect)
         self.b_disc = QPushButton("Rozłącz"); self.b_disc.setObjectName("Ghost"); self.b_disc.clicked.connect(self.disconnect)
-        for x in (self.port, b_ref, self.b_conn, self.b_disc): h.addWidget(x)
-        return h
+        for b in (b_ref, self.b_conn, self.b_disc): b.setStyleSheet("padding:7px 10px"); b.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        h.addWidget(self.port, 0, 0, 1, 2); h.addWidget(b_ref, 0, 2); h.addWidget(self.b_conn, 1, 0, 1, 2); h.addWidget(self.b_disc, 1, 2)
+        h.setColumnStretch(0, 1); h.setColumnStretch(1, 1); h.setColumnStretch(2, 1); return h
 
     def _vehicle_card(self, parent):
-        c = QFrame(parent); c.setObjectName("VCard"); g = QVBoxLayout(c); g.setContentsMargins(14, 10, 14, 10); g.setSpacing(5)
-        hh = QHBoxLayout(); hh.addWidget(QLabel("<span style='font-size:16pt;font-weight:800'>BMW E39 540i (M62)</span>")); ms = MStripe(4); ms.setFixedWidth(34); hh.addWidget(ms); hh.addStretch(); g.addLayout(hh)
+        c = QFrame(parent); c.setObjectName("VCard"); c.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum); g = QVBoxLayout(c); g.setContentsMargins(14, 10, 14, 10); g.setSpacing(5)
+        hh = QHBoxLayout(); hh.addWidget(QLabel("<span style='font-size:14pt;font-weight:800'>BMW E39 540i (M62)</span>"), 1); ms = MStripe(4); ms.setFixedWidth(34); hh.addWidget(ms); hh.addStretch(); g.addLayout(hh)
         self.card_ecu = QLabel(); self.card_ecu.setWordWrap(True); g.addWidget(self.card_ecu)
         line = QFrame(); line.setFixedHeight(1); line.setStyleSheet("background:rgba(63,169,255,110)"); g.addWidget(line)
         grid = QGridLayout(); grid.setHorizontalSpacing(12); grid.setVerticalSpacing(3); self.card_vals = {}
         for i, k in enumerate(["Numer części BMW", "Hardware", "Indeks kodowania", "Rok produkcji", "Dostawca"]):
-            a = QLabel("<span style='color:#8d9ab3'>%s:</span>" % k); b = QLabel("—"); self.card_vals[k] = b; grid.addWidget(a, i, 0); grid.addWidget(b, i, 1)
+            a = QLabel("<span style='color:#8d9ab3'>%s:</span>" % k); a.setMinimumWidth(a.sizeHint().width()); a.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
+            b = QLabel("—"); b.setWordWrap(True); b.setTextInteractionFlags(Qt.TextSelectableByMouse); self.card_vals[k] = b; grid.addWidget(a, i, 0, Qt.AlignTop); grid.addWidget(b, i, 1)
         grid.setColumnStretch(1, 1); g.addLayout(grid); g.addLayout(self._conn_row())
-        q = QHBoxLayout()
+        q = QGridLayout(); q.setSpacing(6); qi = 0
         for n, fn in [("Skan błędów", self.read_dtc), ("Live", lambda: self.go("Na żywo")), ("Zapłony", lambda: self.go("Zapłony")), ("Adaptacje", lambda: self.go("Adaptacje"))]:
-            b = QPushButton(n); b.setObjectName("Ghost"); b.clicked.connect(fn); q.addWidget(b)
+            b = QPushButton(n); b.setObjectName("Ghost"); b.setStyleSheet("padding:6px 8px"); b.clicked.connect(fn); q.addWidget(b, qi // 2, qi % 2); qi += 1
             if n == "Skan błędów": self.dme_btns.append(b)
         g.addLayout(q); self.card_status = QLabel(); self.card_status.setWordWrap(True); self.card_status.setStyleSheet("font-size:9.5pt;font-weight:700"); g.addWidget(self.card_status); return c
 
     def _tiles(self):
-        w = QWidget(); h = QHBoxLayout(w); h.setContentsMargins(6, 0, 6, 0); h.setSpacing(10); acc = ["#1f6fff", "#00e5d4", "#ff3fb4", "#a64dff", "#3fa9ff"]
+        w = QWidget(); self.tile_grid = h = QGridLayout(w); h.setContentsMargins(0, 0, 0, 0); h.setSpacing(10); self.tile_ws = []; acc = ["#1f6fff", "#00e5d4", "#ff3fb4", "#a64dff", "#3fa9ff"]
         for i, (title, sub, ic, btn, target, red) in enumerate([("Silnik", "Sterownik DME ME7.2", "chip", "Diagnostyka", "Błędy", False),
                 ("Dane na żywo", "Z DME, co 0,7 s", "chart", "Live Data", "Na żywo", False), ("Wypadanie zapłonów", "Nierówność cyl. 1–8", "ai", "Zapłony", "Zapłony", False),
                 ("Adaptacje", "Mieszanka + lambda", "wrench", "Adaptacje", "Adaptacje", False), ("ECU Programowanie", "Wyłączone (bezpieczeństwo)", "chip", "Dlaczego?", "Flash", True)]):
@@ -188,31 +218,56 @@ class Main(QMainWindow):
             ac = RED if red else acc[i % len(acc)]
             if not red: f.setStyleSheet("#Tile{border:2px solid %s}" % ac)
             r = QHBoxLayout(); r.addWidget(Icon(ic, ac, 42)); r.addWidget(QLabel("<b style='font-size:11.5pt'>%s</b><br><span style='color:#aab4c8;font-size:8.5pt'>%s</span>" % (title, sub)), 1); v.addLayout(r)
-            b = QPushButton("⊕  " + btn); b.setObjectName("Ghost"); b.clicked.connect(lambda _, t=target: self.go(t)); v.addWidget(b); h.addWidget(f); glow(f, ac, 30, 220)
+            b = QPushButton("⊕  " + btn); b.setObjectName("Ghost"); b.clicked.connect(lambda _, t=target: self.go(t)); v.addWidget(b); self.tile_ws.append(f); glow(f, ac, 30, 220)
         return w
 
     def _home(self):
-        w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(6)
+        """Grafika ma własny obszar (cała widoczna), karta pojazdu obok (szeroko) albo pod nią (wąsko). Całość przewijana, nic nie jest ucinane."""
+        sc = QScrollArea(); sc.setWidgetResizable(True); sc.setFrameShape(QFrame.NoFrame); sc.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); sc.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        sc.verticalScrollBar().setStyleSheet("QScrollBar:vertical{width:6px;background:transparent} QScrollBar::handle:vertical{background:#1f6fff;border-radius:3px}")
+        sc.setStyleSheet("QScrollArea{background:transparent} QScrollArea > QWidget > QWidget{background:transparent}")
+        w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(6, 6, 6, 6); v.setSpacing(8)
         heroes = sorted(os.listdir(resource("hero"))) if os.path.isdir(resource("hero")) else []
-        self.hero = Hero(resource("hero", heroes[0]) if heroes else None); self.hero.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        self.vcard = self._vehicle_card(self.hero); glow(self.vcard, "#c04dff", 36, 190); self.hero.resizeEvent = lambda e: self._place_card()
-        v.addWidget(self.hero, 1); v.addWidget(self._tiles()); v.addWidget(self._bottom()); return w
+        self.hero = Hero(None); self.hero.spacer = True; self.hero.on_art = lambda pth: (self.art.set_art(pth), self.update())
+        self.hero.set_art(resource("hero", heroes[0]) if heroes else None); self.hero.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        self.vcard = self._vehicle_card(None); glow(self.vcard, "#c04dff", 30, 170)
+        self.hero_row = QGridLayout(); self.hero_row.setSpacing(8); v.addLayout(self.hero_row); self._hero_wide = None
+        v.addWidget(self._tiles()); v.addWidget(self._bottom()); sc.setWidget(w)
+        self.home_body = w; self.home_scroll = sc; sc.resizeEvent = lambda e: (QScrollArea.resizeEvent(sc, e), self._place_card()); return sc
 
     def _place_card(self):
-        if self.hero.card_slot:
-            r = self.hero.map_frac(*self.hero.card_slot)
-            self.vcard.setGeometry(int(r.x()), int(max(4, r.y())), int(max(r.width(), 380)), int(min(self.vcard.sizeHint().height() + 6, self.hero.height() - 8))); return
-        self.vcard.setGeometry(10, 10, int(min(max(380, self.hero.width() * 0.33), 520)), min(self.vcard.sizeHint().height() + 6, self.hero.height() - 20))
-
+        if not hasattr(self, "home_scroll"): return
+        W = self.home_scroll.viewport().width() - 12; wide = W >= 1250
+        if wide != self._hero_wide:
+            for x in self.tile_ws: self.tile_grid.removeWidget(x)
+            for x, _ in self.bot_ws: self.bot_grid.removeWidget(x)
+            for c in range(6): self.tile_grid.setColumnStretch(c, 0); self.bot_grid.setColumnStretch(c, 0)
+            if wide:
+                for i, x in enumerate(self.tile_ws): self.tile_grid.addWidget(x, 0, i); self.tile_grid.setColumnStretch(i, 1)
+                for i, (x, st) in enumerate(self.bot_ws): self.bot_grid.addWidget(x, 0, i); self.bot_grid.setColumnStretch(i, st)
+            else:
+                for i, x in enumerate(self.tile_ws): self.tile_grid.addWidget(x, i // 3, i % 3); self.tile_grid.setColumnStretch(i % 3, 1)
+                order = [(0, 0, 0, 1, 1), (1, 0, 1, 1, 1), (3, 0, 2, 1, 1), (2, 1, 0, 1, 2), (4, 1, 2, 1, 1)]
+                for k, r, c, rs, cs in order: self.bot_grid.addWidget(self.bot_ws[k][0], r, c, rs, cs)
+                for c in range(3): self.bot_grid.setColumnStretch(c, 1)
+            self._hero_wide = wide; self.hero_row.removeWidget(self.hero); self.hero_row.removeWidget(self.vcard)
+            # karta zawsze po lewej (przyciski połączenia bez przewijania), po prawej przezroczyste "okno" na grafikę tła
+            self.hero_row.addWidget(self.vcard, 0, 0, Qt.AlignTop); self.hero_row.addWidget(self.hero, 0, 1); self.hero_row.setColumnStretch(1, 1)
+        cw = int(min(440, max(330, W * 0.27))) if wide else int(min(380, max(320, W * 0.42))); self.vcard.setFixedWidth(cw)
+        self.hero.setMinimumHeight(0)
     def _bottom(self):
-        w = QWidget(); w.setFixedHeight(235); h = QHBoxLayout(w); h.setContentsMargins(6, 0, 6, 6); h.setSpacing(6)
+        w = QWidget(); w.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum); self.bot_grid = QGridLayout(w); self.bot_grid.setContentsMargins(0, 0, 0, 0); self.bot_grid.setSpacing(6); self.bot_ws = []
+        class _H:  # zbiera panele, układ (1 lub 2 rzędy) ustala _place_card
+            def __init__(s2, me): s2.me = me
+            def addWidget(s2, wd, st=1): wd.setMinimumHeight(210); wd.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum); s2.me.bot_ws.append((wd, st))
+        h = _H(self)
         p = Panel("Status", RED, "DME"); self.health = QLabel(); self.health.setAlignment(Qt.AlignCenter); self.health.setWordWrap(True); p.l.addWidget(self.health, 1)
         p.l.addWidget(QLabel("<span style='color:#8d9ab3;font-size:7.5pt'>Odpytywany jest tylko DME silnika (0x12).</span>")); glow(p, RED, 26, 150); h.addWidget(p, 3)
         p = Panel("Błędy", BLUE, "(DTC z DME)"); self.dtc_ring = Ring(0, RED, "—", "w pamięci", thick=0.08); self.dtc_ring.setMinimumSize(90, 90); p.l.addWidget(self.dtc_ring, 1)
         b = QPushButton("Pokaż błędy"); b.setObjectName("Ghost"); b.clicked.connect(lambda: self.go("Błędy")); p.l.addWidget(b); glow(p, "#00e5d4", 26, 170); h.addWidget(p, 2)
         p = Panel("Live", RED, "Data (z DME)"); g = QGridLayout(); g.setSpacing(5); self.live_tiles = {}
         for i, (key, label, unit, col) in enumerate(LIVE_TILES):
-            f = QFrame(); f.setStyleSheet("QFrame{background:#070d1c;border:1px solid #1c2a4a;border-radius:5px}"); fv = QVBoxLayout(f); fv.setContentsMargins(8, 4, 8, 4); fv.setSpacing(0)
+            f = QFrame(); f.setStyleSheet("QFrame{background:rgba(7,13,28,150);border:1px solid rgba(63,169,255,70);border-radius:5px}"); fv = QVBoxLayout(f); fv.setContentsMargins(8, 4, 8, 4); fv.setSpacing(0)
             t = QLabel("<span style='color:#aab4c8;font-size:8pt'>%s</span>" % label); val = QLabel("—"); sp = Spark(col)
             for x in (t, val): x.setStyleSheet("border:none")
             fv.addWidget(t); fv.addWidget(val); fv.addWidget(sp, 1); g.addWidget(f, i // 3, i % 3); self.live_tiles[key] = (val, sp, unit, col)
@@ -279,7 +334,7 @@ class Main(QMainWindow):
         v.addWidget(QLabel("<span style='font-size:18pt;font-weight:800'>Ustawienia</span>"))
         pn = Panel("Wygląd", BLUE, "– grafika tła"); cb = QComboBox()
         if os.path.isdir(resource("hero")): cb.addItems(sorted(os.listdir(resource("hero"))))
-        cb.currentTextChanged.connect(lambda n: (self.hero.set_art(resource("hero", n)), self._place_card())); pn.l.addWidget(cb); v.addWidget(pn)
+        cb.currentTextChanged.connect(lambda n: (self.hero.set_art(resource("hero", n)), setattr(self, "_hero_wide", None), self._place_card())); pn.l.addWidget(cb); v.addWidget(pn)
         pn = Panel("Program", BLUE, "– wersja %s" % VERSION)
         for text, fn in (("Sprawdź aktualizacje", lambda: self.check_update(True)), ("Przywróć poprzednią wersję…", self.rollback), ("O programie", self.about)):
             b = QPushButton(text); b.setObjectName("Ghost"); b.clicked.connect(fn); pn.l.addWidget(b)
@@ -316,7 +371,7 @@ class Main(QMainWindow):
         self.b_conn.setEnabled(not on); self.b_disc.setEnabled(on)
 
     def tick(self):
-        self.clock.setText("<b style='font-size:12pt'>%s</b><br><span style='color:#8d9ab3;font-size:8pt'>%s</span>" % (time.strftime("%H:%M"), time.strftime("%d.%m.%Y")))
+        self.clock.setText("<b style='font-size:12pt'>%s</b> <span style='color:#8d9ab3;font-size:8pt'>&nbsp;%s</span>" % (time.strftime("%H:%M"), time.strftime("%d.%m.%Y")))
 
     def refresh(self):
         ok = self.dev is not None; n = len(self.faults) if (ok and self.faults is not None) else None

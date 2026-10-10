@@ -11,7 +11,7 @@ class Panel(QFrame):
     """Panel z neonową ramką (kolor ramki = akcent)."""
     def __init__(self, title=None, accent=BLUE, title2=None):
         super().__init__(); self.accent = accent; self.setObjectName("Panel")
-        self.setStyleSheet("#Panel{background:rgba(6,10,22,215);border:2px solid %s;border-radius:12px}" % (accent + "dd"))
+        self.setStyleSheet("#Panel{background:rgba(6,10,22,178);border:2px solid %s;border-radius:12px}" % (accent + "dd"))
         self.l = QVBoxLayout(self); self.l.setContentsMargins(12, 8, 12, 10); self.l.setSpacing(6)
         if title:
             t = QLabel("<b>%s</b> <span style='color:%s'>%s</span>" % (title, accent, title2 or "")); t.setStyleSheet("background:transparent;font-size:11pt")
@@ -126,23 +126,28 @@ class Hero(QWidget):
         self.card_slot = None  # (fx, fy, fw, fh) – miejsce na kartę pojazdu w ułamkach obrazu
         if path and "_user" in str(path) and not self.pix.isNull():
             # grafika z referencji: pasmo treści 3840x1300 w ramce 16:9 (reszta to rozmyte wypełnienie)
-            h = self.pix.height(); self.pix = self.pix.copy(0, int(h * 0.1991), self.pix.width(), int(h * 0.6018)); self.card_slot = (0.108, 0.0, 0.334, 0.40)
+            h = self.pix.height(); self.pix = self.pix.copy(0, int(h * 0.1991), self.pix.width(), int(h * 0.6018)); self.card_slot = None
         # rozmyte tło do wypełnienia pasów bocznych w trybie "contain"
         self.blur = self.pix.scaled(48, 27, Qt.IgnoreAspectRatio, Qt.SmoothTransformation) if not self.pix.isNull() else QPixmap()
+        if getattr(self, "on_art", None): self.on_art(path)
         self.update()
+
+    def aspect(self):
+        return (self.pix.width() / self.pix.height()) if not self.pix.isNull() and self.pix.height() else 16 / 9
 
     def image_rect(self):
         """Tryb CONTAIN: cały obraz widoczny (głowy i stopy), wyśrodkowany."""
         r = self.rect()
         if self.pix.isNull(): return QRectF(r)
         pw, ph = self.pix.width(), self.pix.height(); sc = min(r.width() / pw, r.height() / ph); w, h = pw * sc, ph * sc
-        return QRectF(r.width() - w, (r.height() - h) / 2, w, h)  # kotwica do prawej: lewa strona wolna na kartę
+        return QRectF((r.width() - w) / 2, (r.height() - h) / 2, w, h)  # wyśrodkowany, karta ma własne miejsce obok
 
     def map_frac(self, fx, fy, fw, fh):
         """Prostokąt w ułamkach obrazu -> współrzędne widżetu (tryb contain)."""
         ir = self.image_rect(); return QRectF(ir.x() + ir.width() * fx, ir.y() + ir.height() * fy, ir.width() * fw, ir.height() * fh)
 
     def paintEvent(self, e):
+        if getattr(self, "spacer", False): return  # grafika jest tłem całego okna (WindowArt)
         p = QPainter(self); p.setRenderHint(QPainter.SmoothPixmapTransform); r = self.rect()
         if not self.pix.isNull():
             p.drawPixmap(QRectF(r), self.blur, QRectF(self.blur.rect())); p.fillRect(r, QColor(2, 4, 10, 150))
@@ -154,6 +159,28 @@ class Hero(QWidget):
         else:
             g = QLinearGradient(0, 0, r.width(), r.height()); g.setColorAt(0, QColor("#120512")); g.setColorAt(1, QColor("#03122a")); p.fillRect(r, g)
 
+
+
+class WindowArt:
+    """Tło całego okna w trybie COVER (pełna klatka 16:9, bez wycinania pasma), skalowane przy każdej zmianie rozmiaru."""
+    FOCUS_X = 0.47  # środek kadru między dziewczynami a autem przy oknach węższych niż 16:9
+
+    def __init__(self, path=None): self.cache = None; self.set_art(path)
+
+    def set_art(self, path):
+        self.pix = QPixmap(path) if path else QPixmap(); self.cache = None
+
+    def paint(self, p, r):
+        W, H = r.width(), r.height()
+        if self.pix.isNull() or W <= 0 or H <= 0:
+            g = QLinearGradient(0, 0, W, H); g.setColorAt(0, QColor("#120512")); g.setColorAt(1, QColor("#03122a")); p.fillRect(r, g); return
+        if not self.cache or self.cache[0] != (W, H):
+            pw, ph = self.pix.width(), self.pix.height(); sc = max(W / pw, H / ph); sw, sh = W / sc, H / sc
+            sx = min(max(pw * self.FOCUS_X - sw / 2, 0), pw - sw); sy = (ph - sh) / 2
+            self.cache = ((W, H), self.pix.copy(int(sx), int(sy), int(sw), int(sh)).scaled(W, H, Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
+        p.drawPixmap(0, 0, self.cache[1])
+        g = QLinearGradient(0, 0, W, 0)  # kontrast: lewa strona (menu + karta) ciemniejsza, środek/prawo jasne
+        g.setColorAt(0, QColor(2, 4, 10, 120)); g.setColorAt(0.35, QColor(2, 4, 10, 40)); g.setColorAt(1, QColor(2, 4, 10, 20)); p.fillRect(r, g)
 
 
 def glow(w, color, radius=22, strength=200):
