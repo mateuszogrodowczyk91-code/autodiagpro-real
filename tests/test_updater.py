@@ -47,3 +47,17 @@ def test_swap_script_keeps_backup():
     s = updater.swap_script(r"C:\s", 123, r"C:\app", r"C:\bk", "1.1.0")
     assert "Wait-Process -Id 123" in s and "app_1.1.0_" in s and "Start-Process" in s
     assert "flash" not in s.lower()
+
+
+def test_safe_extract_rejects_zip_slip(tmp_path):
+    import io, zipfile, pytest
+    from autodiag_real import updater
+    for bad in ("../x.txt", "/abs.txt", "C:/win.txt", "a\\..\\..\\x.txt"):
+        b = io.BytesIO()
+        with zipfile.ZipFile(b, "w") as z: z.writestr(bad, "x")
+        with zipfile.ZipFile(b) as z:
+            with pytest.raises(updater.UpdateError): updater.safe_extract(z, str(tmp_path / "s"))
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w") as z: z.writestr("ok/a.txt", "x")
+    with zipfile.ZipFile(b) as z: updater.safe_extract(z, str(tmp_path / "s"))
+    assert (tmp_path / "s" / "ok" / "a.txt").exists()

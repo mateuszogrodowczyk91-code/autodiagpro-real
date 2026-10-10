@@ -82,11 +82,20 @@ def download_and_stage(info, fetch=_get, upd_dir=UPD_DIR):
     stage = os.path.join(upd_dir, "stage_" + info["version"])
     if os.path.isdir(stage): __import__("shutil").rmtree(stage)
     with zipfile.ZipFile(zpath) as z:
-        for n in z.namelist():
-            if n.startswith("/") or ".." in n.replace("\\", "/").split("/"): raise UpdateError("Niebezpieczna ścieżka w ZIP: " + n)
-        z.extractall(stage)
+        safe_extract(z, stage)
     if not os.path.isfile(os.path.join(stage, EXE)): raise UpdateError("W paczce brak %s." % EXE)
     return stage
+
+
+def safe_extract(z, dest):
+    """Rozpakowanie bez zip-slip: odrzuca ścieżki bezwzględne (/, \\, C:), '..' i wszystko, co po rozwinięciu wychodzi poza dest."""
+    root = os.path.realpath(dest)
+    for n in z.namelist():
+        u = n.replace("\\", "/")
+        if u.startswith("/") or re.match(r"^[A-Za-z]:", u) or ".." in u.split("/"): raise UpdateError("Niebezpieczna ścieżka w ZIP: " + n)
+        t = os.path.realpath(os.path.join(root, u))
+        if t != root and not t.startswith(root + os.sep): raise UpdateError("Niebezpieczna ścieżka w ZIP: " + n)
+    z.extractall(root)
 
 
 def swap_script(stage, pid, app_dir=APP_DIR, backup_dir=BACKUP_DIR, old_version=VERSION):

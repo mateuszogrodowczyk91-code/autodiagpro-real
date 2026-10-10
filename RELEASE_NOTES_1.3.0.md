@@ -17,3 +17,6 @@ AI Mechanic/Chmura, Companion, ODX/Sekwencje/UDS, VCI/DoIP/J2534, LPG, Klapa wyd
 PODZIĘKOWANIA: tabela 132 kodów ME7.2 i pomysł blokady portu pochodzą z poprawek w AutoDiagPro_poprawiony (AUDYT_AutoDiagPro.md, inny bot).
 Nie przeniesiono: inicjalizacji 5-baud OBD-II (ogólne OBD 10400 baud, inna ścieżka niż B8 KWP ME7.2 i zależna od starego kodu .pyc),
 tokenu podglądu na telefon (Companion usunięty) ani bezpiecznych aktualizacji definicji (ta wersja nie ładuje definicji; aktualizacje programu sprawdzają SHA256).
+
+BEZPIECZEŃSTWO: aktualizator sprawdza SHA256 przed rozpakowaniem i rozpakowuje bezpiecznie (odrzuca ścieżki bezwzględne, C:, '..' i wyjście poza folder – ochrona przed zip-slip).
+Wersja 1.3.0 nie ma serwera podglądu na telefon/LAN ani aktualizacji definicji – nie ma czego zabezpieczać tokenem.
