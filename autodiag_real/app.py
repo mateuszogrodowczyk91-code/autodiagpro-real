@@ -1,14 +1,14 @@
 """AutoDiag Pro 1.2 – pełny interfejs (menu boczne, grafika, kafelki) + PRAWDZIWY rdzeń ME7.2.
 Każda wartość na ekranie pochodzi z odpowiedzi DME. Gdy jej nie ma: „brak odpowiedzi z DME” albo „—”. Brak trybu demo."""
 import datetime, os, queue, sys, threading, time
-from PySide6.QtCore import Qt, QObject, Signal, QTimer
+from PySide6.QtCore import Qt, QObject, Signal, QTimer, QRect
 from PySide6.QtGui import QIcon, QAction, QColor, QPainter
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QPushButton, QComboBox, QLabel,
     QTableWidget, QTableWidgetItem, QHeaderView, QPlainTextEdit, QMessageBox, QFileDialog, QStackedWidget, QFrame, QSizePolicy, QAbstractItemView, QScrollArea)
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from autodiag_real import me72, updater
+from autodiag_real import me72, ds2, updater
 from autodiag_real.version import VERSION
 from autodiag_real.ui.theme import Theme
 from autodiag_real.ui.widgets import glow, Panel, Ring, Spark, Bar, Icon, MStripe, Hero, WindowArt, RED, BLUE, CYAN, GREEN, AMBER, TXT, MUTED
@@ -30,7 +30,6 @@ DISABLED = {
     "Kodowanie": ("Kodowanie (NCS)", "Wyłączone. Brak zweryfikowanych danych kodowania dla E39 – do kodowania użyj NCS Expert."),
     "Retrofit": ("Retrofit", "Wyłączone. Wymaga kodowania modułów (patrz Kodowanie)."),
     "Tryby mocy": ("Touring Studio / Tryby mocy", "Wyłączone. Zmiana mocy = zmiana map w DME (flash), a flash jest wyłączony."),
-    "Moduły": ("BMW Expert – inne moduły", "Ta wersja rozmawia tylko z DME silnika ME7.2 (adres 0x12). ABS/DSC, EGS, SRS, IHKA, GM – nieobsługiwane."),
     "Serwis": ("Serwis / Procedury", "Wyłączone. Reset serwisu i adaptacje przepustnicy dotyczą licznika/innych komend – niezweryfikowane dla E39."),
     "EWS": ("EWS / immobilizer · emisja", "Niedostępne i nie będzie. Obchodzenie zabezpieczenia przed kradzieżą i wyłączanie sond/katalizatora/emisji "
             "nie są wspierane (nielegalne / niebezpieczne)."),
@@ -40,8 +39,9 @@ NAV = [("Home", "home", "home"), ("Diagnostyka", "gear", "Błędy"), ("Live Data
        ("BMW Expert", "roundel", "Moduły"), ("Touring Studio", "car", "Tryby mocy"), ("Serwis", "wrench", "Serwis"), ("Kodowanie", "code", "Kodowanie"),
        ("ECU Program.", "chip", "Flash"), ("Dane / Logi", "db", "Log"), ("Ustawienia", "gear", "Ustawienia")]
 SIDE = [("Przegląd", "home", "home"), ("Identyfikacja DME", "chip", "Identyfikacja"), ("Diagnostyka (błędy)", "gear", "Błędy"), ("Live Data", "chart", "Na żywo"),
-        ("Wypadanie zapłonów", "ai", "Zapłony"), ("Adaptacje / lambda", "wrench", "Adaptacje"), ("Log (surowe bajty)", "db", "Log"), ("Ustawienia", "gear", "Ustawienia"),
-        None, ("BMW Expert", "roundel", "Moduły"), ("Touring Studio", "car", "Tryby mocy"), ("Serwis / Procedury", "wrench", "Serwis"), ("Kodowanie (NCS)", "code", "Kodowanie"),
+        ("Wypadanie zapłonów", "ai", "Zapłony"), ("Adaptacje / lambda", "wrench", "Adaptacje"), ("Log (surowe bajty)", "db", "Log"), ("BMW Expert (moduły DS2)", "roundel", "Moduły"),
+        ("Zawieszenie EHC", "car", "Moduły"), ("Ustawienia", "gear", "Ustawienia"),
+        None, ("Touring Studio", "car", "Tryby mocy"), ("Serwis / Procedury", "wrench", "Serwis"), ("Kodowanie (NCS)", "code", "Kodowanie"),
         ("Retrofit", "plug", "Retrofit"), ("Mapy ECU", "db", "Mapy"), ("ECU Programowanie", "chip", "Flash"), ("EWS / emisja", "book", "EWS")]
 
 SHELL_QSS = """
@@ -108,13 +108,13 @@ class Main(QMainWindow):
         self.trace_path = os.path.join(LOG_DIR, "trace_%s.txt" % datetime.datetime.now().strftime("%Y%m%d_%H%M%S")); self.dme_btns = []
         root = QWidget(); root.setObjectName("Root"); root.setStyleSheet(Theme.QSS + SHELL_QSS)
         v = QVBoxLayout(root); v.setContentsMargins(0, 0, 0, 0); v.setSpacing(0); v.addWidget(self._top())
-        body = QHBoxLayout(); body.setSpacing(0); sd = QScrollArea(); sd.setWidget(self._side()); sd.setWidgetResizable(True); sd.setFrameShape(QFrame.NoFrame); sd.setFixedWidth(215)
+        body = QHBoxLayout(); body.setSpacing(0); sd = QScrollArea(); sd.setWidget(self._side()); sd.setWidgetResizable(True); sd.setFrameShape(QFrame.NoFrame); sd.setFixedWidth(200)
         sd.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff); sd.setStyleSheet("QScrollArea{background:transparent} QScrollArea > QWidget > QWidget{background:transparent} QScrollBar:vertical{width:5px;background:transparent} QScrollBar::handle:vertical{background:#1f6fff;border-radius:2px}")
         body.addWidget(sd)
         self.stack = QStackedWidget(); self.idx = {}
         self._add("home", self._home())
         self._add("Identyfikacja", self._page_ident()); self._add("Błędy", self._page_dtc()); self._add("Na żywo", self._page_live())
-        self._add("Zapłony", self._page_mis()); self._add("Adaptacje", self._page_adapt()); self._add("Log", self._page_log()); self._add("Ustawienia", self._page_settings())
+        self._add("Zapłony", self._page_mis()); self._add("Adaptacje", self._page_adapt()); self._add("Log", self._page_log()); self._add("Ustawienia", self._page_settings()); self._add("Moduły", self._page_modules())
         for key, (title, why) in DISABLED.items(): self._add(key, self._page_disabled(title, why))
         body.addWidget(self.stack, 1); v.addLayout(body, 1); v.addWidget(self._status()); self.setCentralWidget(root)
         m = self.menuBar(); m.setStyleSheet("QMenuBar{background:rgba(4,8,18,190);color:#d5ddef} QMenu{background:#0d0f24;color:#e8ecff}")
@@ -128,7 +128,13 @@ class Main(QMainWindow):
         QTimer.singleShot(2500, lambda: self.check_update(False))
 
     def paintEvent(self, e):
-        p = QPainter(self); p.setRenderHint(QPainter.SmoothPixmapTransform); self.art.paint(p, self.rect())
+        p = QPainter(self); p.setRenderHint(QPainter.SmoothPixmapTransform); self.art.paint(p, self.rect(), self.art_target())
+
+    def art_target(self):
+        """Ostra grafika tylko w wolnym miejscu: na Home w polu obok karty pojazdu, na innych stronach – brak (tylko rozmyte tło)."""
+        if not hasattr(self, "hero") or self.stack.currentIndex() != self.idx.get("home") or not self.hero.isVisible(): return None
+        tl = self.hero.mapTo(self, self.hero.rect().topLeft()); r = QRect(tl, self.hero.size())
+        clip = QRect(self.stack.mapTo(self, self.stack.rect().topLeft()), self.stack.size()); return r.intersected(clip)
 
     def resizeEvent(self, e):
         super().resizeEvent(e); self._fit_top()
@@ -170,10 +176,10 @@ class Main(QMainWindow):
         self.online = QLabel(); self.online.setAlignment(Qt.AlignRight); self.online.setMinimumWidth(92); r.addWidget(self.online); h.addLayout(r); return top
 
     def _side(self):
-        side = QFrame(); side.setObjectName("Side"); side.setFixedWidth(210); v = QVBoxLayout(side); v.setContentsMargins(0, 8, 0, 8); v.setSpacing(1); self.sidebtn = []
+        side = QFrame(); side.setObjectName("Side"); side.setFixedWidth(195); v = QVBoxLayout(side); v.setContentsMargins(0, 8, 0, 8); v.setSpacing(1); self.sidebtn = []
         for item in SIDE:
             if item is None:
-                l = QLabel("WYŁĄCZONE (bezpieczeństwo)"); l.setObjectName("SideSep"); v.addWidget(l); continue
+                l = QLabel("WYŁĄCZONE – dlaczego?"); l.setObjectName("SideSep"); v.addWidget(l); continue
             n, ic, target = item; b = QPushButton("        " + n); b.setObjectName("SideBtn"); b.setCheckable(True); b.setMinimumHeight(36)
             if target in DISABLED: b.setStyleSheet("color:#6b7590")
             iw = Icon(ic, "#ffffff" if target not in DISABLED else "#56607a", 20); iw.setParent(b); iw.move(12, 8); iw.setAttribute(Qt.WA_TransparentForMouseEvents)
@@ -233,7 +239,7 @@ class Main(QMainWindow):
         self.vcard = self._vehicle_card(None); glow(self.vcard, "#c04dff", 30, 170)
         self.hero_row = QGridLayout(); self.hero_row.setSpacing(8); v.addLayout(self.hero_row); self._hero_wide = None
         v.addWidget(self._tiles()); v.addWidget(self._bottom()); sc.setWidget(w)
-        self.home_body = w; self.home_scroll = sc; sc.resizeEvent = lambda e: (QScrollArea.resizeEvent(sc, e), self._place_card()); return sc
+        self.home_body = w; self.home_scroll = sc; sc.verticalScrollBar().valueChanged.connect(lambda _: self.update()); sc.resizeEvent = lambda e: (QScrollArea.resizeEvent(sc, e), self._place_card()); return sc
 
     def _place_card(self):
         if not hasattr(self, "home_scroll"): return
@@ -254,7 +260,7 @@ class Main(QMainWindow):
             # karta zawsze po lewej (przyciski połączenia bez przewijania), po prawej przezroczyste "okno" na grafikę tła
             self.hero_row.addWidget(self.vcard, 0, 0, Qt.AlignTop); self.hero_row.addWidget(self.hero, 0, 1); self.hero_row.setColumnStretch(1, 1)
         cw = int(min(440, max(330, W * 0.27))) if wide else int(min(380, max(320, W * 0.42))); self.vcard.setFixedWidth(cw)
-        self.hero.setMinimumHeight(0)
+        hw = max(200, W - cw - 8); self.hero.setMinimumHeight(min(560, int(hw / self.art.aspect()))); self.update()
     def _bottom(self):
         w = QWidget(); w.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum); self.bot_grid = QGridLayout(w); self.bot_grid.setContentsMargins(0, 0, 0, 0); self.bot_grid.setSpacing(6); self.bot_ws = []
         class _H:  # zbiera panele, układ (1 lub 2 rzędy) ustala _place_card
@@ -329,6 +335,17 @@ class Main(QMainWindow):
         self.logbox = QPlainTextEdit(); self.logbox.setReadOnly(True)
         return self._page("Log", "wszystkie wysłane i odebrane bajty", self.logbox, [("Zapisz log do pliku…", self.save_log, False)])
 
+    def _page_modules(self):
+        self.t_mod = table(["Moduł", "Adres DS2", "Identyfikacja (00) – surowe bajty", "Pamięć błędów (04) – surowe bajty"])
+        info = QLabel("Prawdziwy odczyt DS2 po K-line, tylko odczyt (nic nie jest zapisywane ani kasowane). Bajty pokazane surowo – "
+                      "znaczenie kodów sprawdź w INPA. Moduł bez odpowiedzi = nie ma go w aucie albo jest na innej linii. Wymaga połączenia (Połącz z DME).")
+        return self._page("BMW Expert – inne moduły", "DS2: EGS · ABS/ASC · Airbag · IKE · LCM · EHC · IHKA · GM", self.t_mod,
+                          [("Skanuj wszystkie moduły", self.scan_modules, True)], info)
+
+    def scan_modules(self):
+        link = self.tr.link if self.tr else None
+        self.run("modules", lambda: ds2.Ds2(link, self.trace).scan())
+
     def _page_settings(self):
         p = QWidget(); v = QVBoxLayout(p); v.setContentsMargins(16, 12, 16, 12)
         v.addWidget(QLabel("<span style='font-size:18pt;font-weight:800'>Ustawienia</span>"))
@@ -350,6 +367,7 @@ class Main(QMainWindow):
     def go(self, target):
         self.stack.setCurrentIndex(self.idx[target])
         for t, b in self.nav + self.sidebtn: b.setChecked(t == target)
+        self.update()
 
     def log(self, msg, ok=True):
         self.ops.insertRow(0)
@@ -455,6 +473,7 @@ class Main(QMainWindow):
         if name == "connect":
             self.tr, self.ident = res; self.dev = me72.Me72(self.tr); self._enable(True); fill(self.t_id, list(self.ident.items()))
             self.log("Połączono z DME: %s" % self.ident.get("Numer części BMW", "?"))
+        elif name == "modules": fill(self.t_mod, res); self.log("Skan modułów DS2: %d odpowiedziało" % sum(1 for r in res if not r[2].startswith("—")))
         elif name == "ident": self.ident = res; fill(self.t_id, list(res.items()))
         elif name == "dtc":
             count, recs, warn = res; self.faults = recs

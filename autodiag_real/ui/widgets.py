@@ -2,7 +2,7 @@
 import math
 from PySide6.QtWidgets import QWidget, QFrame, QVBoxLayout, QLabel, QPushButton
 from PySide6.QtGui import QPainter, QPen, QColor, QFont, QPainterPath, QLinearGradient, QPixmap, QBrush
-from PySide6.QtCore import Qt, QRectF, QPointF, QSize
+from PySide6.QtCore import Qt, QRect, QRectF, QPointF, QSize
 
 RED, BLUE, CYAN, GREEN, AMBER, TXT, MUTED, PANEL = "#ff2340", "#1f6fff", "#3fa9ff", "#27e07a", "#ffb020", "#eef3ff", "#8d9ab3", "#0a0f1c"
 
@@ -162,25 +162,37 @@ class Hero(QWidget):
 
 
 class WindowArt:
-    """Tło całego okna w trybie COVER (pełna klatka 16:9, bez wycinania pasma), skalowane przy każdej zmianie rozmiaru."""
-    FOCUS_X = 0.47  # środek kadru między dziewczynami a autem przy oknach węższych niż 16:9
+    """Tło okna: rozmyta, przyciemniona kopia grafiki (cover) + OSTRA grafika w trybie CONTAIN w podanym prostokącie.
+    Proporcje zawsze zachowane – nic nie jest rozciągane ani ucinane (obie dziewczyny i auto w całości)."""
 
-    def __init__(self, path=None): self.cache = None; self.set_art(path)
+    def __init__(self, path=None): self.set_art(path)
 
     def set_art(self, path):
-        self.pix = QPixmap(path) if path else QPixmap(); self.cache = None
+        pix = QPixmap(path) if path else QPixmap()
+        if path and "_user" in str(path) and not pix.isNull():  # pasmo treści w ramce 16:9 (reszta to rozmyte wypełnienie)
+            h = pix.height(); pix = pix.copy(0, int(h * 0.1991), pix.width(), int(h * 0.6018))
+        self.pix = pix; self.cache = {}
+        self.small = pix.scaled(64, 22, Qt.IgnoreAspectRatio, Qt.SmoothTransformation) if not pix.isNull() else QPixmap()
 
-    def paint(self, p, r):
+    def aspect(self): return self.pix.width() / self.pix.height() if not self.pix.isNull() and self.pix.height() else 16 / 9
+
+    def contain(self, t):
+        pw, ph = self.pix.width(), self.pix.height(); sc = min(t.width() / pw, t.height() / ph); w, h = int(pw * sc), int(ph * sc)
+        return QRect(t.x() + (t.width() - w) // 2, t.y() + (t.height() - h) // 2, w, h)
+
+    def paint(self, p, r, target=None):
         W, H = r.width(), r.height()
         if self.pix.isNull() or W <= 0 or H <= 0:
             g = QLinearGradient(0, 0, W, H); g.setColorAt(0, QColor("#120512")); g.setColorAt(1, QColor("#03122a")); p.fillRect(r, g); return
-        if not self.cache or self.cache[0] != (W, H):
-            pw, ph = self.pix.width(), self.pix.height(); sc = max(W / pw, H / ph); sw, sh = W / sc, H / sc
-            sx = min(max(pw * self.FOCUS_X - sw / 2, 0), pw - sw); sy = (ph - sh) / 2
-            self.cache = ((W, H), self.pix.copy(int(sx), int(sy), int(sw), int(sh)).scaled(W, H, Qt.IgnoreAspectRatio, Qt.SmoothTransformation))
-        p.drawPixmap(0, 0, self.cache[1])
-        g = QLinearGradient(0, 0, W, 0)  # kontrast: lewa strona (menu + karta) ciemniejsza, środek/prawo jasne
-        g.setColorAt(0, QColor(2, 4, 10, 120)); g.setColorAt(0.35, QColor(2, 4, 10, 40)); g.setColorAt(1, QColor(2, 4, 10, 20)); p.fillRect(r, g)
+        if self.cache.get("bg_size") != (W, H):
+            sw, sh = self.small.width(), self.small.height(); sc = max(W / sw, H / sh)
+            self.cache = {"bg_size": (W, H), "bg": self.small.scaled(int(sw * sc) + 1, int(sh * sc) + 1, Qt.IgnoreAspectRatio, Qt.SmoothTransformation)}
+        bg = self.cache["bg"]; p.drawPixmap((W - bg.width()) // 2, (H - bg.height()) // 2, bg); p.fillRect(r, QColor(2, 4, 10, 150))
+        if target is None or target.width() < 40 or target.height() < 30: return
+        ir = self.contain(target)
+        if self.cache.get("fg_size") != (ir.width(), ir.height()):
+            self.cache["fg_size"] = (ir.width(), ir.height()); self.cache["fg"] = self.pix.scaled(ir.width(), ir.height(), Qt.IgnoreAspectRatio, Qt.SmoothTransformation)
+        p.drawPixmap(ir.topLeft(), self.cache["fg"]); self.last_rect = ir
 
 
 def glow(w, color, radius=22, strength=200):
