@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QLineEdit, QCheckBox, QApplication, QMainWindow, 
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from autodiag_real import me72, ds2, updater, extras
+from autodiag_real import me72, ds2, updater, extras, me72_dtc
 from autodiag_real.version import VERSION
 from autodiag_real.ui.theme import Theme
 from autodiag_real.ui.widgets import glow, Panel, Ring, Spark, Bar, Icon, MStripe, Hero, WindowArt, RED, BLUE, CYAN, GREEN, AMBER, TXT, MUTED
@@ -543,7 +543,7 @@ class Main(QMainWindow):
         elif name == "ident": self.ident = res; fill(self.t_id, list(res.items()))
         elif name == "dtc":
             count, recs, warn = res; self.faults = recs
-            self.dtc_rows = [("%04X" % c, "%02X" % s, format(s, "08b")) for c, s in recs]; fill(self.t_dtc, self.dtc_rows); self._alldtc_refresh()
+            self.dtc_rows = [("%04X" % c, "%02X" % s, format(s, "08b"), me72_dtc.describe(c)) for c, s in recs]; fill(self.t_dtc, self.dtc_rows); self._alldtc_refresh()
             self.dtc_info.setText((("DME zgłasza %d błędów. " % count) + " ".join(warn) + " Kody BMW (nie P-kody OBD) – znaczenie sprawdź w INPA. "
                                    "Format odpowiedzi niepotwierdzony na tym aucie.") if count else "DME odpowiedziało: brak zapisanych błędów.")
             self.log("Odczyt błędów: %d" % count)
@@ -593,7 +593,7 @@ class Main(QMainWindow):
 
     def _page_dtc(self):
         w = QWidget(); v = QVBoxLayout(w); v.setContentsMargins(0, 0, 0, 0)
-        self.t_dtc = table(["Kod BMW (hex)", "Status (hex)", "Status (bity)"]); self.dtc_info = QLabel(""); v.addWidget(self.t_dtc, 2)
+        self.t_dtc = table(["Kod BMW (hex)", "Status (hex)", "Status (bity)", "Opis (lista DME 7.2, endtuning.com)"]); self.dtc_info = QLabel(""); v.addWidget(self.t_dtc, 2)
         v.addWidget(QLabel("<b>Szczegóły zaznaczonego błędu (freeze frame, 17 HH LL)</b>")); self.t_ff = table(["Pole", "Wartość z DME"]); v.addWidget(self.t_ff, 1)
         return self._page("Diagnostyka – pamięć błędów", "18 02 FF FF · szczegóły 17 · kasowanie 14 FF 00", w,
                           [("Czytaj błędy", self.read_dtc, True), ("Szczegóły błędu (freeze frame)", self.read_ff, True), ("Eksport CSV…", lambda: self.export_csv(self.t_dtc, "bledy_dme"), False),
@@ -608,7 +608,7 @@ class Main(QMainWindow):
     def read_all_dtc(self): self.read_dtc(); self.scan_modules()
 
     def _alldtc_refresh(self):
-        rows = [("Silnik (DME ME7.2)", "0x12", ("brak błędów" if not self.dtc_rows else ", ".join("%s/%s" % (c, s) for c, s, _ in self.dtc_rows)) if self.faults is not None else "—")]
+        rows = [("Silnik (DME ME7.2)", "0x12", ("brak błędów" if not self.dtc_rows else ", ".join("%s/%s" % (r[0], r[1]) for r in self.dtc_rows)) if self.faults is not None else "—")]
         rows += [(r[0], r[1], r[3]) for r in self.mod_rows]; fill(self.t_all, rows)
 
     def _modules_done(self, res):
@@ -706,7 +706,7 @@ class Main(QMainWindow):
         return self._page("Raport", "eksport HTML / PDF przez przeglądarkę", box, [("Utwórz raport", self.make_report, False)], self.rep_info)
 
     def make_report(self):
-        sec = [("Identyfikacja DME", ["Pole", "Wartość"], list((self.ident or {}).items())), ("Pamięć błędów DME", ["Kod BMW", "Status", "Bity"], self.dtc_rows),
+        sec = [("Identyfikacja DME", ["Pole", "Wartość"], list((self.ident or {}).items())), ("Pamięć błędów DME", ["Kod BMW", "Status", "Bity", "Opis"], self.dtc_rows),
                ("Szczegóły błędu", ["Pole", "Wartość"], self.ff_rows), ("Dane na żywo (ostatni odczyt)", ["Parametr", "Wartość"], list(self.live.items())),
                ("Adaptacje", ["Parametr", "Wartość", "Jedn."], getattr(self, "ad_rows_adapt", [])), ("Status lambda", ["Parametr", "Wartość", ""], getattr(self, "ad_rows_lambda", [])),
                ("Moduły DS2", ["Moduł", "Adres", "Ident (hex)", "Błędy (hex)", "Ident (tekst)"], self.mod_rows),

@@ -8,6 +8,7 @@ W tym pliku NIE MA danych przykładowych ani zmyślonych odpowiedzi. Każda licz
 Klasa ISerialLink pozwala testom jednostkowym podać nagrane bajty; aplikacja używa wyłącznie SerialLink (pyserial).
 """
 import struct
+import threading
 import time
 
 DME = 0x12
@@ -61,6 +62,7 @@ class SerialLink:
     def __init__(self, port):
         import serial
         self.name = port
+        self.lock = threading.RLock()   # jedno żądanie naraz na porcie (pomysł z AutoDiagPro_poprawiony)
         self.ser = serial.Serial(port=port, baudrate=9600, bytesize=8, parity=serial.PARITY_EVEN, stopbits=1, timeout=1.0,
                                  xonxoff=False, rtscts=False, dsrdtr=False)
         self.ser.dtr = False; self.ser.rts = False
@@ -134,6 +136,11 @@ class Me72Transport:
 
     def request(self, payload):
         if not self.link: raise NoResponse("Brak odpowiedzi z DME: port nie jest otwarty.")
+        lock = getattr(self.link, "lock", None)
+        if lock is None: return self._request(payload)
+        with lock: return self._request(payload)
+
+    def _request(self, payload):
         tx = build(payload)
         busy = 0
         while True:

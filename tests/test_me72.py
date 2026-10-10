@@ -87,4 +87,5 @@ def test_no_demo_strings_anywhere_in_app():
         for f in fs:
             if f.endswith(".py"):
                 s = open(os.path.join(dp, f), encoding="utf-8").read().lower()
+                s = s.replace("'ews 3.3 random code storage'", "")  # nazwa błędu 204 ze źródła endtuning.com (DME 7.2), nie losowanie
                 for b in bad: assert b not in s, (f, b)

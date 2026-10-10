@@ -1,4 +1,4 @@
-AutoDiag Pro – WERSJA REALNA 1.2.0 (BMW E39 540i, DME Bosch ME7.2, kabel K+DCAN)
+AutoDiag Pro – WERSJA REALNA 1.3.0 (zmiany: RELEASE_NOTES_1.3.0.md) (BMW E39 540i, DME Bosch ME7.2, kabel K+DCAN)
 =========================================================================
 
 JAK URUCHOMIĆ

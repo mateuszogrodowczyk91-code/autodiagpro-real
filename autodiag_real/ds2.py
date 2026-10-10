@@ -32,6 +32,11 @@ class Ds2:
 
     def request(self, addr, data):
         if not self.link: raise NoResponse("Port nie jest otwarty.")
+        lock = getattr(self.link, "lock", None)
+        if lock is None: return self._request(addr, data)
+        with lock: return self._request(addr, data)
+
+    def _request(self, addr, data):
         tx = build(addr, data); rx = bytearray(); self.link.clear(); self.trace("TX", tx, "DS2"); self.link.write(tx)
         try:
             r = self._frame(rx)

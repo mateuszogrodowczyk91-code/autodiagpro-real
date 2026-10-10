@@ -26,3 +26,26 @@ def test_ds2_text(): assert extras.ds2_ident_text(b"\x007545105\x01") == "754510
 
 def test_report_only_given_data():
     h = extras.report_html([("X", ["a"], [])]); assert "nie odczytano" in h
+
+
+# --- przeniesione z AutoDiagPro_poprawiony/tests/test_bmw.py (dostosowane)
+from autodiag_real import me72_dtc
+
+
+def test_dtc_table_132_with_source():
+    assert len(me72_dtc.CODES) == 132 and "endtuning.com" in me72_dtc.SOURCE
+
+
+def test_known_code_hex_to_decimal():
+    assert me72_dtc.describe("0001").startswith("Leak Diagnosis Pump")
+
+
+def test_unknown_code_is_unknown_not_invented():
+    assert me72_dtc.describe(0x7777).startswith("NIEZNANY")
+
+
+def test_port_lock_does_not_break_b8_path():
+    import threading
+    from test_me72 import FakeLink, reply
+    l = FakeLink([reply(b"\xE2" + b"7545105" + b"0205" + b"0B" + b"03" + b"28" + b"01" + b"BOSCH ")]); l.lock = threading.RLock()
+    assert me72.Me72(me72.Me72Transport(l)).ident()["Numer części BMW"] == "7545105"
