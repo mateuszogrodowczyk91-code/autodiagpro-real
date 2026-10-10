@@ -1,4 +1,4 @@
-AutoDiag Pro – WERSJA REALNA 1.1.0 (BMW E39 540i, DME Bosch ME7.2, kabel K+DCAN)
+AutoDiag Pro – WERSJA REALNA 1.2.0 (BMW E39 540i, DME Bosch ME7.2, kabel K+DCAN)
 =========================================================================
 
 JAK URUCHOMIĆ
@@ -71,3 +71,13 @@ WERSJA I AKTUALIZACJE (od 1.1.0)
 - Pomoc -> Przywróć poprzednią wersję: wraca do ostatniej kopii z backups.
 - Aktualizator zmienia TYLKO pliki programu. Nigdy niczego nie wgrywa do auta.
 - Ikona: własny projekt (układ scalony + przebieg sygnału), nie logo BMW.
+
+
+WERSJA 1.2.0 – JEDEN PROGRAM: PEŁNY WYGLĄD + PRAWDZIWY RDZEŃ
+- Wrócił wygląd starego AutoDiagPro: górny pasek ikon, menu boczne, grafika garażu, karta pojazdu, kafelki, panele.
+- Każdy panel pokazuje dane z DME: karta pojazdu (identyfikacja A2), Status DME, Błędy (liczba z pamięci DME),
+  Live Data (obroty, temp. płynu, temp. ssania, napięcie, MAF, kąt zapłonu – z wykresami), Zapłony (nierówność cyl. 1–8),
+  Ostatnie operacje (prawdziwy dziennik). Bez połączenia: "BRAK ODPOWIEDZI Z DME" albo "—".
+- Usunięte na stałe: tryb demo, symulator, losowe wartości, wpisany na sztywno cylinder, wskaźniki CPU/RAM laptopa, chmura, QR.
+- W menu (sekcja WYŁĄCZONE): BMW Expert (inne moduły), Touring Studio, Serwis, Kodowanie, Retrofit, Mapy ECU,
+  ECU Programowanie, EWS/emisja – każda strona wyjaśnia po polsku, dlaczego jest wyłączona.

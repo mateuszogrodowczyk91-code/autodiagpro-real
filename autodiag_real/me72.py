@@ -4,7 +4,7 @@ Protokół BMW "KWP2000*": [B8][cel 12][źródło F1][długość][dane...][XOR],
 Źródła: przechwycenia testera na M62TU (pBmwScanner, gigijoe), tabela pomiarów SGBD ME72KWP1,
 ten sam kod co w HannaAda (Me72Protocol.cs). NIE ZWERYFIKOWANE jeszcze na TYM aucie.
 
-W tym pliku NIE MA symulatora ani danych przykładowych. Każda liczba pochodzi z bajtów odebranych z DME.
+W tym pliku NIE MA danych przykładowych ani zmyślonych odpowiedzi. Każda liczba pochodzi z bajtów odebranych z DME.
 Klasa ISerialLink pozwala testom jednostkowym podać nagrane bajty; aplikacja używa wyłącznie SerialLink (pyserial).
 """
 import struct

@@ -78,3 +78,13 @@ def test_app_has_no_demo_or_simulator():
     src += open(os.path.join(os.path.dirname(__file__), "..", "autodiag_real", "me72.py"), encoding="utf-8").read().lower()
     for bad in ("random", "fakelink", "simulatortransport", "simulator.json", "import tests"):
         assert bad not in src
+
+
+def test_no_demo_strings_anywhere_in_app():
+    root = os.path.join(os.path.dirname(__file__), "..", "autodiag_real")
+    bad = ("tryb demo", "simulator", "symulator", "random", "psutil", "cpu_percent", "virtual_memory", "qrcode", "firestore", "googleapis", "misfire_cyl")
+    for dp, _, fs in os.walk(root):
+        for f in fs:
+            if f.endswith(".py"):
+                s = open(os.path.join(dp, f), encoding="utf-8").read().lower()
+                for b in bad: assert b not in s, (f, b)
