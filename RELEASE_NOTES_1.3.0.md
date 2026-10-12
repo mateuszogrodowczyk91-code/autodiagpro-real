@@ -20,3 +20,10 @@ tokenu podglądu na telefon (Companion usunięty) ani bezpiecznych aktualizacji 
 
 BEZPIECZEŃSTWO: aktualizator sprawdza SHA256 przed rozpakowaniem i rozpakowuje bezpiecznie (odrzuca ścieżki bezwzględne, C:, '..' i wyjście poza folder – ochrona przed zip-slip).
 Wersja 1.3.0 nie ma serwera podglądu na telefon/LAN ani aktualizacji definicji – nie ma czego zabezpieczać tokenem.
+
+## Gałąź lingxi/readonly-dtc-live-modules (tylko odczyt)
+- `autodiag_real/bmw_dtc.py` – integracja pracy Engineer Bota: opisy DE z lokalnego `bmw_me72_prg.json` (131 kodów), zapas: publiczna lista EN. Plik JSON NIE trafia do publicznego repo (dane pochodne BMW) – szukany lokalnie. Mapowanie ORT→nr oznaczone jako NIEPEWNE.
+- `autodiag_real/live.py` – migawka parametrów ME7.2 (silnik, nierówność biegu, lambda); bez połączenia „—” + „brak połączenia”.
+- `autodiag_real/modules_ro.py` – odczyt identyfikacji i pamięci błędów pozostałych modułów E39 przez DS2, z twardą blokadą komend zapisu/kodowania/flash i EWS.
+- Niezweryfikowane na aucie: wszystkie adresy DS2, pozycje bajtów live, mapowanie ORT. Kodowanie, flash i EWS pozostają wyłączone.
+- UI (`app.py`) nie zmieniony – podpięcie do zrobienia przez właściciela app.py.
