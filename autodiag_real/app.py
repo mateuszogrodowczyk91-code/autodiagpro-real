@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QLineEdit, QCheckBox, QApplication, QMainWindow, 
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from autodiag_real import me72, ds2, updater, extras, me72_dtc, bmw_dtc, live as live_ro, modules_ro
+from autodiag_real import me72, ds2, updater, extras, me72_dtc, bmw_dtc, coldstart, live as live_ro, modules_ro
 from autodiag_real.version import VERSION
 from autodiag_real.ui.theme import Theme
 from autodiag_real.ui.widgets import glow, Panel, Ring, Spark, Bar, Icon, MStripe, Hero, WindowArt, RED, BLUE, CYAN, GREEN, AMBER, TXT, MUTED
@@ -57,7 +57,7 @@ NAV = [("Home", "home", "home"), ("Auto-diagnoza", "ai", "Smart"), ("Diagnostyka
        ("ECU Program.", "chip", "Flash"), ("Raport", "book", "Raport"), ("Dane / Logi", "db", "Log"), ("Ustawienia", "gear", "Ustawienia")]
 SIDE = [("Przegląd", "home", "home"), ("AUTO-DIAGNOZA (Smart Scan)", "ai", "Smart"), ("Identyfikacja DME", "chip", "Identyfikacja"), ("Diagnostyka (błędy DME)", "gear", "Błędy"),
         ("Pokaż wszystkie DTC", "gear", "WszystkieDTC"), ("Live Data", "chart", "Na żywo"), ("Data Log (wykres + CSV)", "db", "DataLog"),
-        ("Wypadanie zapłonów", "ai", "Zapłony"), ("Adaptacje / lambda", "wrench", "Adaptacje"), ("BMW Expert / Lista sterowników", "roundel", "Moduły"),
+        ("Wypadanie zapłonów", "ai", "Zapłony"), ("Nie odpala na zimno", "wrench", "Zimny start"), ("Adaptacje / lambda", "wrench", "Adaptacje"), ("BMW Expert / Lista sterowników", "roundel", "Moduły"),
         ("Zawieszenie EHC", "car", "Moduły"), ("Topologia", "plug", "Topologia"), ("Bateria", "chip", "Bateria"), ("VIN Auto", "book", "VIN"),
         ("Raport", "book", "Raport"), ("Log (surowe bajty)", "db", "Log"), ("Ustawienia / VCI", "gear", "Ustawienia"),
         None, ("Serwis / Procedury", "wrench", "Serwis"), ("Active tests", "plug", "Testy"), ("Backup ECU", "db", "Backup"), ("Guided", "ai", "Guided"),
@@ -178,7 +178,7 @@ class Main(QMainWindow):
         self.stack = QStackedWidget(); self.idx = {}
         self._add("home", self._home())
         self._add("Identyfikacja", self._page_ident()); self._add("Błędy", self._page_dtc()); self._add("Na żywo", self._page_live())
-        self._add("Zapłony", self._page_mis()); self._add("Adaptacje", self._page_adapt()); self._add("Log", self._page_log()); self._add("Ustawienia", self._page_settings()); self._add("Moduły", self._page_modules())
+        self._add("Zapłony", self._page_mis()); self._add("Zimny start", self._page_cold()); self._add("Adaptacje", self._page_adapt()); self._add("Log", self._page_log()); self._add("Ustawienia", self._page_settings()); self._add("Moduły", self._page_modules())
         self._add("Smart", self._page_smart()); self._add("WszystkieDTC", self._page_alldtc()); self._add("DataLog", self._page_datalog())
         self._add("Topologia", self._page_topology()); self._add("Bateria", self._page_battery()); self._add("VIN", self._page_vin()); self._add("Raport", self._page_report())
         for key, (title, why) in DISABLED.items(): self._add(key, self._page_disabled(title, why))
@@ -383,6 +383,17 @@ class Main(QMainWindow):
         self.b_live.toggled.connect(self.toggle_live)
         return self._page("Live Data", "22 40 00 – co 0,7 s", self.t_live, [("Odczytaj raz", self.read_live, True), ("Eksport CSV…", lambda: self.export_csv(self.t_live, "live"), False)], extra=self.b_live)
 
+    def _page_cold(self):
+        self.t_cold = table(["Krok", "Wartość", "Status / jednostka"]); fill(self.t_cold, coldstart.run(None)["steps"])
+        self.cold_box = QPlainTextEdit(); self.cold_box.setReadOnly(True); self.cold_box.setPlainText(coldstart.format_report(coldstart.run(None)))
+        info = QLabel("Tylko odczyt (akumulator, płyn vs powietrze, nierówność cylindrów, błędy ME7.2). Kluczyk poz. 2 albo silnik na biegu jałowym. "
+                      "Progi wstępne – do weryfikacji na aucie. Bez połączenia: „—” i brak werdyktu.")
+        pg = self._page("Nie odpala na zimno", "kreator – E39 540i M62TU / ME7.2", self.t_cold,
+                        [("Uruchom kreator", self.run_cold, True)], info)
+        pg.layout().addWidget(self.cold_box); return pg
+
+    def run_cold(self): self.run("cold", lambda: coldstart.run(self.dev))
+
     def _page_mis(self):
         self.t_mis = table(["Cylinder (pozycja w DME)", "Ostatnia nierówność [1/s]", "Średnia [1/s]", "z-score"])
         self.mis_info = QLabel("Silnik na wolnych obrotach, rozgrzany. Zbierz min. 20 próbek. Kolejność pozycji DME vs numer cylindra M62 niepotwierdzona.")
@@ -556,6 +567,7 @@ class Main(QMainWindow):
                 val.setText("<b style='font-size:15pt;color:%s'>%s</b> <span style='color:#8d9ab3'>%s</span>" % (col, ("%.0f" % x) if abs(x) >= 100 else ("%.1f" % x), unit)); sp.push(x)
         elif name in ("adapt", "lambda"): fill(self.t_ad, res); setattr(self, "ad_rows_" + name, res)
         elif name == "ff": self.ff_rows = res; fill(self.t_ff, res); self.log("Szczegóły błędu %s odczytane" % res[0][1])
+        elif name == "cold": fill(self.t_cold, res["steps"]); self.cold_box.setPlainText(coldstart.format_report(res)); self.log("Kreator zimnego startu: %d przyczyn" % len(res["verdict"]))
         elif name == "smart": self._smart_done(res)
         elif name == "rough":
             self.rough_samples += res; mean, z, idx, txt = me72.roughness_outlier(self.rough_samples); last = res[-1]

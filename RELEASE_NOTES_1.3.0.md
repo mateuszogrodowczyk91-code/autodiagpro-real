@@ -33,3 +33,6 @@ Wersja 1.3.0 nie ma serwera podglądu na telefon/LAN ani aktualizacji definicji 
 - Na żywo: kolumna Status; bez połączenia wszystkie wartości „—” / „brak połączenia”.
 - Skan modułów (BMW Expert i Smart Scan) przez bramkę tylko-do-odczytu (tylko 00/04, EWS pominięty).
 - Flash, NCS, EWS, emisja – nadal wyłączone.
+
+## 1.3.2
+- Nowa zakładka „Nie odpala na zimno” (kreator Lingxi, tylko odczyt): akumulator, płyn vs powietrze, nierówność cylindrów, błędy ME7.2 + werdykt z punktacją. Bez połączenia „—” i brak werdyktu. Progi wstępne – do weryfikacji na aucie.
