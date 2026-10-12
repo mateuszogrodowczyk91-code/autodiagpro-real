@@ -114,6 +114,19 @@ def table(headers):
     t.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch); t.setEditTriggers(QTableWidget.NoEditTriggers); return t
 
 
+BMW_TOOLS = {"NCS": ("NCS Expert", [r"C:\NCSEXPER\BIN\NCSEXPER.EXE"]),
+             "Flash": ("WinKFP", [r"C:\EC-APPS\NFS\BIN\WINKFP.EXE", r"C:\EC-APPS\NFS\WINKFP.EXE"])}
+
+
+def _bmw_tool_status(title):
+    """Tylko informacja – AutoDiag Pro nie uruchamia NCS/WinKFP."""
+    key = "NCS" if "NCS" in title else ("Flash" if "Flash" in title else None)
+    if not key: return ""
+    name, paths = BMW_TOOLS[key]
+    found = next((p for p in paths if os.path.isfile(p)), None)
+    return ("%s: zainstalowano (%s) – w AutoDiag Pro nadal wyłączone." % (name, found)) if found else ("%s: nie zainstalowano." % name)
+
+
 def fill(t, rows):
     t.setRowCount(len(rows))
     for r, row in enumerate(rows):
@@ -438,6 +451,8 @@ class Main(QMainWindow):
         p = QWidget(); v = QVBoxLayout(p); v.setContentsMargins(40, 30, 40, 30)
         pn = Panel(title, RED, "– WYŁĄCZONE"); l = QLabel("<p style='font-size:13pt'>%s</p><p style='color:%s'>Ta funkcja jest widoczna w menu, ale celowo nieaktywna. "
                                                           "Program nie udaje działania – nie pokaże żadnych wymyślonych danych.</p>" % (why, MUTED))
+        inst = _bmw_tool_status(title)
+        if inst: l.setText(l.text() + "<p style='color:%s'>%s</p>" % (MUTED, inst))
         l.setWordWrap(True); pn.l.addWidget(l); b = QPushButton("Wykonaj (niedostępne)"); b.setEnabled(False); pn.l.addWidget(b); v.addWidget(pn); v.addStretch(); return p
 
     # ------------------------------------------------ logika
@@ -531,10 +546,10 @@ class Main(QMainWindow):
         self.mis_info.setText("Zbieram 20 próbek z DME…"); self.run("rough", job)
 
     def clear_dtc(self):
-        QMessageBox.information(self, "Kasowanie błędów", "Kasowanie pamięci błędów jest WYŁĄCZONE w tej wersji (tylko odczyt).\n"
-                                "Zostanie włączone dopiero po Twojej decyzji i sprawdzeniu komendy na aucie."); return
-        if QMessageBox.question(self, "Kasowanie błędów", "Na pewno skasować pamięć błędów DME?\n\nNajpierw przepisz kody.\nSilnik WYŁĄCZONY, zapłon w pozycji 2.\n\n"
-                                "Uwaga: komenda kasowania nie była jeszcze sprawdzona na tym aucie.", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes: return
+        if QMessageBox.question(self, "Kasowanie błędów DME", "Skasować pamięć błędów DME (ME7.2)?\n\nNajpierw przepisz/wyeksportuj kody.\n"
+                                "ZAPŁON WŁĄCZONY (poz. 2), SILNIK WYŁĄCZONY.\n\nUwaga: komenda 14 FF 00 nie była jeszcze sprawdzona na tym aucie. "
+                                "Kasowane jest tylko DME – inne moduły bez zmian.", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes: return
+        self.log("Kasowanie błędów DME: wysyłam 14 FF 00 (TX/RX w logu surowych bajtów)")
         self.run("clear", lambda: self.dev.clear_faults())
 
     def toggle_live(self, on):
@@ -560,7 +575,7 @@ class Main(QMainWindow):
             self.dtc_info.setText((("DME zgłasza %d błędów. " % count) + " ".join(warn) + " Kody BMW (nie P-kody OBD) – znaczenie sprawdź w INPA. " + bmw_dtc.source_status() + ". "
                                    "Format odpowiedzi niepotwierdzony na tym aucie.") if count else "DME odpowiedziało: brak zapisanych błędów.")
             self.log("Odczyt błędów: %d" % count)
-        elif name == "clear": self.dtc_info.setText("DME potwierdziło kasowanie (54). Odczytuję ponownie…"); self.log("Kasowanie błędów potwierdzone"); self.read_dtc()
+        elif name == "clear": self.dtc_info.setText("DME potwierdziło kasowanie (odpowiedź 54). Odczytuję ponownie…"); QMessageBox.information(self, "Kasowanie błędów DME", "DME potwierdziło kasowanie (54). Za chwilę ponowny odczyt błędów."); self.log("Kasowanie błędów potwierdzone"); self.read_dtc()
         elif name == "live":
             self._live_failed = False; fill(self.t_live, [(n, x, u, "OK – " + live_ro.connection_status(True)) for n, x, u in res]); self.live = {n: x for n, x, _ in res}; self._record(res)
             for key, (val, sp, unit, col) in self.live_tiles.items():
@@ -587,6 +602,7 @@ class Main(QMainWindow):
             self._live_failed = True; self.live = {}; self.toggle_live(False); fill(self.t_live, [("—", NO_DME, "")])
         if name == "connect": self.dev = None
         if name == "smart": self.smart_info.setText("Przerwano: %s" % msg)
+        if name == "clear": self.dtc_info.setText("Kasowanie NIE potwierdzone: %s" % msg)
         self.refresh()
         QMessageBox.warning(self, NO_DME if isinstance(err, me72.NoResponse) else "Błąd", msg)
 
@@ -611,7 +627,7 @@ class Main(QMainWindow):
         v.addWidget(QLabel("<b>Szczegóły zaznaczonego błędu (freeze frame, 17 HH LL)</b>")); self.t_ff = table(["Pole", "Wartość z DME"]); v.addWidget(self.t_ff, 1)
         return self._page("Diagnostyka – pamięć błędów", "18 02 FF FF · szczegóły 17 · kasowanie 14 FF 00", w,
                           [("Czytaj błędy", self.read_dtc, True), ("Szczegóły błędu (freeze frame)", self.read_ff, True), ("Eksport CSV…", lambda: self.export_csv(self.t_dtc, "bledy_dme"), False),
-                           ("Kasuj błędy… (wyłączone)", self.clear_dtc, False)], self.dtc_info)
+                           ("Kasuj błędy DME…", self.clear_dtc, True)], self.dtc_info)
 
     # --- wszystkie DTC
     def _page_alldtc(self):

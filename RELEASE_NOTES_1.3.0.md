@@ -39,3 +39,7 @@ Wersja 1.3.0 nie ma serwera podglądu na telefon/LAN ani aktualizacji definicji 
 - Poprawki ME7.2 (PR #3, Engineer Bot/Lingxi): nierówność biegu jako „poz. N (prawdopodobnie cyl. X)” wg kolejności 1,5,8,4,6,3,7,2 z SGBD; adaptacja multiplikatywna FRA_W ze znakiem w %; status lambda – minimalna długość; źródło kwp1 dla 4 kodów.
 - Kasowanie pamięci błędów WYŁĄCZONE (tylko odczyt) do decyzji użytkownika.
 - Wszystkie mapowania i progi nadal do potwierdzenia na aucie.
+
+## 1.3.3
+- Kasowanie pamięci błędów DME WŁĄCZONE (decyzja użytkownika): 14 FF 00, jedno potwierdzenie (zapłon wł., silnik wył., komenda niesprawdzona na aucie), TX/RX w logu, wynik w oknie i pod tabelą, potem ponowny odczyt. Tylko DME.
+- Strony Kodowanie (NCS) / ECU Programowanie pokazują, czy NCS Expert / WinKFP są zainstalowane („nie zainstalowano”); w AutoDiag Pro nadal wyłączone. Flash/NCS/EWS/emisja – wyłączone.
