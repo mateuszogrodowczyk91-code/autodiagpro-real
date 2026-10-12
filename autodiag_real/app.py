@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QLineEdit, QCheckBox, QApplication, QMainWindow, 
 
 if __package__ in (None, ""):
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from autodiag_real import me72, ds2, updater, extras, me72_dtc
+from autodiag_real import me72, ds2, updater, extras, me72_dtc, bmw_dtc, live as live_ro, modules_ro
 from autodiag_real.version import VERSION
 from autodiag_real.ui.theme import Theme
 from autodiag_real.ui.widgets import glow, Panel, Ring, Spark, Bar, Icon, MStripe, Hero, WindowArt, RED, BLUE, CYAN, GREEN, AMBER, TXT, MUTED
@@ -379,7 +379,7 @@ class Main(QMainWindow):
         self.t_id = table(["Pole", "Wartość z DME"]); return self._page("Identyfikacja DME", "komenda A2", self.t_id, [("Czytaj identyfikację", self.read_ident, True)])
 
     def _page_live(self):
-        self.t_live = table(["Parametr", "Wartość", "Jednostka"]); self.b_live = QPushButton("▶  Start odczytu na żywo"); self.b_live.setCheckable(True)
+        self.t_live = table(["Parametr", "Wartość", "Jednostka", "Status"]); fill(self.t_live, live_ro.snapshot(None)[0]); self.b_live = QPushButton("▶  Start odczytu na żywo"); self.b_live.setCheckable(True)
         self.b_live.toggled.connect(self.toggle_live)
         return self._page("Live Data", "22 40 00 – co 0,7 s", self.t_live, [("Odczytaj raz", self.read_live, True), ("Eksport CSV…", lambda: self.export_csv(self.t_live, "live"), False)], extra=self.b_live)
 
@@ -406,7 +406,7 @@ class Main(QMainWindow):
 
     def scan_modules(self):
         link = self.tr.link if self.tr else None
-        self.run("modules", lambda: ds2.Ds2(link, self.trace).scan())
+        self.run("modules", lambda: modules_ro.scan_rows(ds2.Ds2(link, self.trace)))
 
     def _page_settings(self):
         p = QWidget(); v = QVBoxLayout(p); v.setContentsMargins(16, 12, 16, 12)
@@ -543,13 +543,13 @@ class Main(QMainWindow):
         elif name == "ident": self.ident = res; fill(self.t_id, list(res.items()))
         elif name == "dtc":
             count, recs, warn = res; self.faults = recs
-            self.dtc_rows = [("%04X" % c, "%02X" % s, format(s, "08b"), me72_dtc.describe(c)) for c, s in recs]; fill(self.t_dtc, self.dtc_rows); self._alldtc_refresh()
-            self.dtc_info.setText((("DME zgłasza %d błędów. " % count) + " ".join(warn) + " Kody BMW (nie P-kody OBD) – znaczenie sprawdź w INPA. "
+            self.dtc_rows = [("%04X" % c, "%02X" % s, format(s, "08b"), bmw_dtc.describe(c)) for c, s in recs]; fill(self.t_dtc, self.dtc_rows); self._alldtc_refresh()
+            self.dtc_info.setText((("DME zgłasza %d błędów. " % count) + " ".join(warn) + " Kody BMW (nie P-kody OBD) – znaczenie sprawdź w INPA. " + bmw_dtc.source_status() + ". "
                                    "Format odpowiedzi niepotwierdzony na tym aucie.") if count else "DME odpowiedziało: brak zapisanych błędów.")
             self.log("Odczyt błędów: %d" % count)
         elif name == "clear": self.dtc_info.setText("DME potwierdziło kasowanie (54). Odczytuję ponownie…"); self.log("Kasowanie błędów potwierdzone"); self.read_dtc()
         elif name == "live":
-            self._live_failed = False; fill(self.t_live, res); self.live = {n: x for n, x, _ in res}; self._record(res)
+            self._live_failed = False; fill(self.t_live, [(n, x, u, "OK – " + live_ro.connection_status(True)) for n, x, u in res]); self.live = {n: x for n, x, _ in res}; self._record(res)
             for key, (val, sp, unit, col) in self.live_tiles.items():
                 x = self.live.get(key)
                 if x is None: val.setText("—"); continue
@@ -625,7 +625,7 @@ class Main(QMainWindow):
         def job():
             out = {}
             for key, fn in (("ident", dev.ident), ("dtc", dev.read_faults), ("live", dev.engine), ("adapt", dev.adaptations), ("lambda", dev.lambda_status),
-                            ("modules", lambda: ds2.Ds2(link, tr).scan())):
+                            ("modules", lambda: modules_ro.scan_rows(ds2.Ds2(link, tr)))):
                 try: out[key] = (fn(), None)
                 except Exception as e: out[key] = (None, str(e))
             return out

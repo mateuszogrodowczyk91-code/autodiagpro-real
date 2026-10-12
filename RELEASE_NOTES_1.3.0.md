@@ -27,3 +27,9 @@ Wersja 1.3.0 nie ma serwera podglądu na telefon/LAN ani aktualizacji definicji 
 - `autodiag_real/modules_ro.py` – odczyt identyfikacji i pamięci błędów pozostałych modułów E39 przez DS2, z twardą blokadą komend zapisu/kodowania/flash i EWS.
 - Niezweryfikowane na aucie: wszystkie adresy DS2, pozycje bajtów live, mapowanie ORT. Kodowanie, flash i EWS pozostają wyłączone.
 - UI (`app.py`) nie zmieniony – podpięcie do zrobienia przez właściciela app.py.
+
+## 1.3.1
+- Błędy DME: opisy DE z lokalnego SGBD (bmw_me72_prg.json, jeśli jest na komputerze), zapas EN; status źródła pod tabelą.
+- Na żywo: kolumna Status; bez połączenia wszystkie wartości „—” / „brak połączenia”.
+- Skan modułów (BMW Expert i Smart Scan) przez bramkę tylko-do-odczytu (tylko 00/04, EWS pominięty).
+- Flash, NCS, EWS, emisja – nadal wyłączone.

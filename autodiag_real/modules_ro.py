@@ -39,3 +39,16 @@ class ReadOnlyDs2:
 def offline_table():
     return [{"moduł": n, "adres": "0x%02X" % a, "identyfikacja": "—", "błędy (surowo)": "—", "status": NO_LINK,
              "zweryfikowane": "NIE – wymaga testu na aucie"} for n, a in ds2.MODULES]
+
+
+def scan_rows(ds2_obj):
+    """Skan modułów przez bramkę tylko-do-odczytu; format wierszy jak ds2.Ds2.scan(). EWS pominięty."""
+    g = ReadOnlyDs2(ds2_obj); out = []
+    for name, a in ds2.MODULES:
+        if a == EWS_ADDR: continue
+        row = [name, "0x%02X" % a]
+        for cmd in (ds2.CMD_IDENT, ds2.CMD_FAULTS):
+            try: row.append(hexs(g.request(a, [cmd])))
+            except Exception as e: row.append("— " + str(e).split(".")[0])
+        out.append(row)
+    return out
