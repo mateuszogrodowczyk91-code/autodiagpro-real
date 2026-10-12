@@ -207,9 +207,19 @@ def decode_engine(d):
     return out
 
 
+# SYSTEMCHECK_LAUFUNRUHE (me72kwp0/1.prg): pozycje 1..8 w 22 40 03 -> cylindry 1,5,8,4,6,3,7,2 (kolejność zapłonu).
+# Zweryfikowane w SGBD, ale NIEPOTWIERDZONE na aucie – nigdy nie podawaj cylindra jako pewnego.
+ROUGH_POS_TO_CYL = (1, 5, 8, 4, 6, 3, 7, 2)
+
+
+def rough_label(pos):
+    """pos 1..8 -> 'poz. N (prawdopodobnie cyl. X)'."""
+    return "poz. %d (prawdopodobnie cyl. %d)" % (pos, ROUGH_POS_TO_CYL[pos - 1])
+
+
 def decode_roughness(d):
-    """22 40 03: nierówność biegu (Laufunruhe) cyl. 1–8 w 1/s. To ten sam sygnał, z którego DME wykrywa wypadanie zapłonów.
-    Kolejność względem fizycznych cylindrów NIE potwierdzona na aucie."""
+    """22 40 03: nierówność biegu (Laufunruhe), pozycje 1–8 w 1/s (kolejność zapłonu, patrz ROUGH_POS_TO_CYL).
+    To ten sam sygnał, z którego DME wykrywa wypadanie zapłonów. Mapowanie na cylindry do potwierdzenia na aucie."""
     _expect(d, 19, [0x62, 0x40, 0x03], "nierówność biegu (22 40 03)")
     return [s16(d, 3 + i * 2) * 0.0027756 for i in range(8)]
 
@@ -218,11 +228,13 @@ def decode_adaptations(d):
     _expect(d, 11, [0x62, 0x40, 0x04], "adaptacje (22 40 04)")
     return [("Adaptacja addytywna bank 1", s16(d, 3) * 0.046875, "%"),
             ("Adaptacja addytywna bank 2", s16(d, 5) * 0.046875, "%"),
-            ("Adaptacja multiplikatywna bank 1 (skala niepewna)", u16(d, 7) * 0.0000305, "× (1,000 = brak korekty)"),
-            ("Adaptacja multiplikatywna bank 2 (skala niepewna)", u16(d, 9) * 0.0000305, "× (1,000 = brak korekty)")]
+            # FRA_W / FRA2_W: słowo ze znakiem × 0,0000305 % (me72kwp0/1.prg)
+            ("Adaptacja multiplikatywna bank 1 (FRA_W)", s16(d, 7) * 0.0000305, "%"),
+            ("Adaptacja multiplikatywna bank 2 (FRA2_W)", s16(d, 9) * 0.0000305, "%")]
 
 
 def decode_lambda_status(d):
+    # długość MINIMALNA: SGBD czyta też d[4] (B_EWS_OK, tu nie pokazywany) – dłuższa odpowiedź jest poprawna
     _expect(d, 4, [0x62, 0x40, 0x07], "status lambda (22 40 07)")
     b = d[3]; yn = lambda m: "TAK" if b & m else "NIE"
     return [("Bieg jałowy", yn(0x01), ""), ("Pełne obciążenie", yn(0x02), ""),
@@ -274,5 +286,5 @@ def roughness_outlier(samples, z_thr=3.5, min_samples=5):
     z = [0.6745 * (m - med) / mad for m in mean]
     w = max(range(8), key=lambda c: abs(z[c]))
     if abs(z[w]) > z_thr:
-        return mean, z, w, "Odstaje pozycja %d (z = %.1f). Potwierdź INPA i zamianą cewki/świecy." % (w + 1, z[w])
-    return mean, z, None, "Żaden cylinder wyraźnie nie odstaje (max z = %.1f na pozycji %d)." % (abs(z[w]), w + 1)
+        return mean, z, w, "Odstaje %s (z = %.1f). Mapowanie cylindrów do potwierdzenia na aucie – potwierdź INPA i zamianą cewki/świecy." % (rough_label(w + 1), z[w])
+    return mean, z, None, "Żaden cylinder wyraźnie nie odstaje (max z = %.1f, %s)." % (abs(z[w]), rough_label(w + 1))

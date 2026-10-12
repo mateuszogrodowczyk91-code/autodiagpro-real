@@ -57,10 +57,18 @@ def test_coil_outlier():
     vals = [0.10, 0.12, 0.09, 0.11, 3.0, 0.13, 0.10, 0.12]
     r = coldstart.run(D(eng=eng_bytes(0, 0, 12.6), rough=rough_bytes(vals), faults=b"\x58\x00"))
     names = [v[1] for v in r["verdict"]]
-    assert names[0] == "Cewka zapłonowa – cylinder (pozycja) 5" and any("FGR7DQP" in n and "BKR6EQUP" in n for n in names)
+    assert names[0] == "Zapłon/cewka – poz. 5 (prawdopodobnie cyl. 6), do potwierdzenia na aucie" and any("FGR7DQP" in n and "BKR6EQUP" in n for n in names)
 
 
 def test_pump_check_always_listed_when_connected():
     r = coldstart.run(D(eng=eng_bytes(0, 0, 12.6), faults=b"\x58\x00"))
     assert any("Pompa" in v[1] for v in r["verdict"])
     assert "weryfikacji na aucie" in r["note"]
+
+
+def test_coil_verdict_never_definitive_cylinder():
+    vals = [3.0, 0.12, 0.09, 0.11, 0.10, 0.13, 0.10, 0.12]
+    r = coldstart.run(D(eng=eng_bytes(0, 0, 12.6), rough=rough_bytes(vals), faults=b"\x58\x00"))
+    top = r["verdict"][0]
+    assert "poz. 1 (prawdopodobnie cyl. 1)" in top[1] and "potwierdzenia na aucie" in top[1]
+    assert "Cewka zapłonowa – cylinder" not in " ".join(v[1] for v in r["verdict"])
