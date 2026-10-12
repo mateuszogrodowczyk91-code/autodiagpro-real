@@ -64,3 +64,31 @@ def test_elm_mode04_blocked():
     assert "brak połączenia" in e.clear_faults(True)
     with pytest.raises(elm327.ElmError): e.cmd("02", allow_clear=True)
     assert "brak połączenia" in e.faults_report() and "—" in e.live_report()
+
+
+class ElmFake:
+    """Symulator protokołu do testu (nie dane auta): pierwsze 'dead' odpowiedzi puste, potem echo 'OK'."""
+    def __init__(self, dead=0, at2="OK"): self.dead, self.at2, self.sent, self.rec = dead, at2, [], 0
+    def write(self, b): self.sent.append(b.decode().strip())
+    def readUntilPrompt(self, t):
+        if self.dead: self.dead -= 1; return ""
+        return self.at2 if self.sent[-1] == "ATAT2" else "OK"
+    def reconnect(self): self.rec += 1; return True
+
+
+def test_elm_adaptive_and_fallback():
+    j = ElmFake(at2="?"); e = elm327.Elm327(j); e.init()
+    assert e.ok and "ATAT1" in j.sent and "ATST64" in j.sent and e.rtt is not None
+    assert 1.0 <= e.timeout_for(5.0) <= 5.0
+
+
+def test_elm_reconnect_once():
+    j = ElmFake(); e = elm327.Elm327(j); e.init(); j.dead = 2
+    assert e.keepalive() == "OK" and j.rec == 1
+    j.dead = 10
+    assert e.keepalive() == "—"
+
+
+def test_elm_clear_never_retried():
+    j = ElmFake(); e = elm327.Elm327(j); e.init(); j.dead = 5
+    assert "NIE wykonano" in e.clear_faults(True) and j.rec == 0

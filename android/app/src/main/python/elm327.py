@@ -1,6 +1,8 @@
 """ELM327 przez Bluetooth – tylko standardowe OBD-II (SAE J1979), tylko silnik. TYLKO ODCZYT (tryby 01 i 03; tryb 04 kasowania zablokowany).
 W E39 ELM327 nie widzi pozostałych modułów BMW – do tego potrzebny kabel K+DCAN.
 Obiekt Java: write(byte[]), readUntilPrompt(timeout_s) -> str. Bez połączenia: "—" / "brak połączenia"."""
+import time
+
 NO_LINK = "brak połączenia"
 DASH = "—"
 ALLOWED_PREFIX = ("AT", "01", "03")
@@ -63,25 +65,56 @@ def parse_mode03(lines):
 
 
 class Elm327:
-    def __init__(self, j): self.j = j; self.ok = False
+    def __init__(self, j): self.j = j; self.ok = False; self.rtt = None
 
-    def cmd(self, c, timeout=3.0, allow_clear=False):
+    def _raw(self, c, timeout):
+        self.j.write((c + "\r").encode("ascii"))
+        t0 = time.monotonic()
+        r = str(self.j.readUntilPrompt(float(timeout)) or "")
+        dt = time.monotonic() - t0
+        if r: self.rtt = dt if self.rtt is None else 0.7 * self.rtt + 0.3 * dt
+        return r
+
+    def timeout_for(self, base):
+        """Adaptacyjny timeout: ~4x średni czas odpowiedzi, min 1 s, max podana wartość bazowa."""
+        if self.rtt is None: return base
+        return max(1.0, min(base, 4.0 * self.rtt + 0.5))
+
+    def cmd(self, c, timeout=3.0, allow_clear=False, _retry=True):
         if not (allow_clear and c == "04") and not c.upper().replace(" ", "").startswith(ALLOWED_PREFIX):
             raise ElmError("Tylko odczyt: komenda %s zablokowana." % c)
-        self.j.write((c + "\r").encode("ascii"))
-        r = str(self.j.readUntilPrompt(float(timeout)))
-        if not r: raise ElmError("ELM327 nie odpowiada (%s)" % c)
+        try:
+            r = self._raw(c, self.timeout_for(timeout))
+            if not r and self.rtt is not None: r = self._raw(c, timeout)   # druga próba z pełnym czasem
+        except OSError as e:
+            r = None; err = e
+        if not r:
+            # zerwane połączenie: ponowne połączenie z backoffem (Kotlin), ponowna inicjalizacja, jedna powtórka
+            if _retry and c != "04" and hasattr(self.j, "reconnect") and self.j.reconnect():
+                self.init(); return self.cmd(c, timeout, allow_clear, False)
+            raise ElmError("ELM327 nie odpowiada (%s)" % c)
         return clean(r)
 
     def init(self):
         try:
-            ver = self.cmd("ATZ", 5.0)
-            for c in ("ATE0", "ATL0", "ATS1", "ATH0", "ATSP0"): self.cmd(c)
+            self.rtt = None
+            ver = self.cmd("ATZ", 5.0, _retry=False)
+            for c in ("ATE0", "ATL0", "ATS1", "ATH0"): self.cmd(c, _retry=False)
+            at2 = self.cmd("ATAT2", _retry=False)          # adaptacyjny timing ELM (agresywny)
+            if any("?" in l for l in at2):                  # klon bez AT2: stały timeout 400 ms
+                self.cmd("ATAT1", _retry=False); self.cmd("ATST64", _retry=False)
+            self.cmd("ATSP0", _retry=False)
             self.ok = True
             return "ELM327: %s. Tylko OBD-II, tylko silnik (DME). Inne moduły E39 wymagają kabla K+DCAN." % (" ".join(ver) or "?")
         except (ElmError, OSError) as e:
             self.ok = False
             return "ELM327: %s – %s" % (NO_LINK, e)
+
+    def keepalive(self):
+        """Podtrzymanie połączenia (ATRV – tylko odczyt napięcia). Zwraca napięcie albo '—'."""
+        if not self.ok: return DASH
+        try: return " ".join(self.cmd("ATRV", 2.0)) or DASH
+        except (ElmError, OSError): return DASH
 
     def live_report(self):
         out = ["Dane na żywo – ELM327 (OBD-II, tylko silnik)"]

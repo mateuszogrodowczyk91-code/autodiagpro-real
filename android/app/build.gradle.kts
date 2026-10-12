@@ -10,13 +10,13 @@ val copyDesktopLogic by tasks.registering(Copy::class) {
 
 android {
     namespace = "pl.autodiag.real"
-    compileSdk = 35
+    compileSdk = 36
     defaultConfig {
         applicationId = "pl.autodiag.real"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 1
-        versionName = "1.3.2-android"
+        targetSdk = 36
+        versionCode = 2
+        versionName = "0.2.0"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }

@@ -1,13 +1,10 @@
 package pl.autodiag.real
 
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothDevice
-import android.bluetooth.BluetoothSocket
 import android.hardware.usb.UsbManager
 import com.hoho.android.usbserial.driver.UsbSerialDriver
 import com.hoho.android.usbserial.driver.UsbSerialPort
 import java.io.ByteArrayOutputStream
-import java.util.UUID
 
 /** K-line przez kabel K+DCAN (FTDI) na USB-OTG. 9600 8E1, jak w wersji na laptopa (me72.SerialLink). Bez roota. */
 class UsbKLink(manager: UsbManager, driver: UsbSerialDriver) {
@@ -51,23 +48,3 @@ class UsbKLink(manager: UsbManager, driver: UsbSerialDriver) {
     fun close() { try { port.close() } catch (_: Exception) {} }
 }
 
-/** ELM327 przez Bluetooth (SPP). Tylko OBD-II – w E39 to wyłącznie silnik. */
-class ElmBtLink @SuppressLint("MissingPermission") constructor(dev: BluetoothDevice) {
-    private val sock: BluetoothSocket =
-        dev.createRfcommSocketToServiceRecord(UUID.fromString("00001101-0000-1000-8000-00805F9B34FB"))
-    init { sock.connect() }
-    fun write(b: ByteArray) { sock.outputStream.write(b); sock.outputStream.flush() }
-    fun readUntilPrompt(timeoutS: Double): String {
-        val sb = StringBuilder(); val deadline = System.currentTimeMillis() + (timeoutS * 1000).toLong()
-        val ins = sock.inputStream
-        while (System.currentTimeMillis() < deadline) {
-            if (ins.available() > 0) {
-                val c = ins.read(); if (c < 0) break
-                if (c.toChar() == '>') return sb.toString()
-                sb.append(c.toChar())
-            } else Thread.sleep(10)
-        }
-        return sb.toString()
-    }
-    fun close() { try { sock.close() } catch (_: Exception) {} }
-}

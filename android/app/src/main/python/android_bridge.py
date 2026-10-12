@@ -134,5 +134,10 @@ def clear_faults(confirmed=False):
     return "Kasowanie błędów: DME potwierdziło (54). Odczytaj błędy ponownie, aby sprawdzić."
 
 
+def keepalive():
+    e = _state["elm"]
+    return e.keepalive() if (_state["mode"] == "elm" and e) else DASH
+
+
 def blocked(feature):
     raise WriteBlocked("%s jest zablokowane w tej wersji (tylko odczyt, dopóki nie sprawdzone na aucie)." % feature)
