@@ -28,6 +28,20 @@ def test_write_commands_blocked():
     for p in (me72.CLEAR_DTC, [0x34, 0, 0], [0x3B, 1], [0x27, 1], [0x31, 1], [0x2E, 1]):
         with pytest.raises(ab.WriteBlocked): t.request(p)
     with pytest.raises(ab.WriteBlocked): ab.blocked("EWS")
+    # nawet z allow_clear przepuszczane jest tylko dokładnie 14 FF 00
+    for p in ([0x34, 0, 0], [0x3B, 1], [0x27, 1], [0x14, 0x00, 0x00]):
+        with pytest.raises(ab.WriteBlocked): t.request(p, allow_clear=True)
+
+
+def test_clear_needs_confirmation_and_link():
+    ab.detach()
+    with pytest.raises(ab.WriteBlocked): ab.clear_faults()
+    assert "brak połączenia" in ab.clear_faults(True)
+    j = FakeJ(); ab.attach_kline(j)
+    assert "NIE wykonano" in ab.clear_faults(True)
+    assert j.w[-1] == me72.build(me72.CLEAR_DTC)   # B8 12 F1 03 14 FF 00 XOR
+    assert "silnik ZGASZONY" in ab.clear_warning() and "NIE jest jeszcze zweryfikowana" in ab.clear_warning()
+    ab.detach()
 
 
 def test_kline_no_answer_is_dash():
@@ -46,4 +60,7 @@ def test_elm_parsers():
 def test_elm_mode04_blocked():
     e = elm327.Elm327(None)
     with pytest.raises(elm327.ElmError): e.cmd("04")
+    with pytest.raises(elm327.ElmError): e.clear_faults()
+    assert "brak połączenia" in e.clear_faults(True)
+    with pytest.raises(elm327.ElmError): e.cmd("02", allow_clear=True)
     assert "brak połączenia" in e.faults_report() and "—" in e.live_report()

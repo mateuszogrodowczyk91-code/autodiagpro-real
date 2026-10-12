@@ -51,7 +51,7 @@ class MainActivity : Activity() {
         val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 48, 24, 24); setBackgroundColor(Color.rgb(18, 20, 24)) }
         fun tv(t: String, size: Float = 14f) = TextView(this).apply { text = t; textSize = size; setTextColor(Color.WHITE) }
         root.addView(tv("AutoDiagPro – BMW E39 540i (M62, ME7.2)", 18f))
-        root.addView(tv("Tylko odczyt. Flash, kodowanie NCS, EWS i kasowanie błędów są zablokowane.", 12f).apply { setTextColor(Color.rgb(255, 180, 80)) })
+        root.addView(tv("Odczyt + kasowanie błędów (z potwierdzeniem). Flash, kodowanie NCS i EWS są zablokowane.", 12f).apply { setTextColor(Color.rgb(255, 180, 80)) })
         status = tv("Status: — brak połączenia", 14f).apply { setPadding(0, 16, 0, 16) }
         root.addView(status)
 
@@ -62,7 +62,7 @@ class MainActivity : Activity() {
         root.addView(row("Kabel K+DCAN (USB-OTG)" to { connectUsb() }, "Bluetooth ELM327" to { pickBt() }))
         root.addView(tv("ELM327 = tylko standardowe OBD-II, tylko silnik. Pełny odczyt modułów BMW tylko przez kabel K+DCAN.", 11f).apply { setTextColor(Color.LTGRAY) })
         root.addView(row("Błędy" to { run("faults") }, "Na żywo" to { run("live_data") }, "Rozłącz" to { disconnect() }))
-        root.addView(row("Nie odpala na zimno" to { run("cold_start") }, "Moduły E39" to { run("modules") }))
+        root.addView(row("Nie odpala na zimno" to { run("cold_start") }, "Moduły E39" to { run("modules") }, "Kasuj błędy" to { confirmClear() }))
         root.addView(row("Flash (zablokowane)" to { run("blocked", "Flashowanie (WinKFP)") },
             "NCS (zablokowane)" to { run("blocked", "Kodowanie NCS") }, "EWS (zablokowane)" to { run("blocked", "EWS") }).apply { alpha = 0.5f })
         out = tv("—\nbrak połączenia\n\n$dtcSrc", 12f).apply { typeface = Typeface.MONOSPACE; setTextIsSelectable(true) }
@@ -83,6 +83,13 @@ class MainActivity : Activity() {
             val r = try { bridge.callAttr(fn, *a).toString() } catch (e: Exception) { e.message ?: e.toString() }
             runOnUiThread { out.text = r }
         }
+    }
+
+    private fun confirmClear() {
+        val warn = bridge.callAttr("clear_warning").toString()
+        AlertDialog.Builder(this).setTitle("Kasować błędy?").setMessage(warn + "\n\nCzy zapłon jest włączony, a silnik zgaszony?")
+            .setPositiveButton("Tak, kasuj") { _, _ -> run("clear_faults", true) }
+            .setNegativeButton("Anuluj", null).show()
     }
 
     private fun connectUsb() {

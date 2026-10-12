@@ -15,6 +15,10 @@ PIDS = [("0C", "Obroty", "obr/min", lambda b: (b[0] * 256 + b[1]) / 4.0),
         ("04", "Obciążenie silnika", "%", lambda b: b[0] * 100 / 255.0)]
 
 
+CLEAR_WARN = ("Kasowanie błędów OBD-II (tryb 04). Zapłon WŁĄCZONY (poz. 2), silnik ZGASZONY.\n"
+              "UWAGA: NIE zweryfikowane na tym aucie. Kasuje też gotowość monitorów emisji.")
+
+
 class ElmError(IOError):
     pass
 
@@ -61,8 +65,8 @@ def parse_mode03(lines):
 class Elm327:
     def __init__(self, j): self.j = j; self.ok = False
 
-    def cmd(self, c, timeout=3.0):
-        if not c.upper().replace(" ", "").startswith(ALLOWED_PREFIX):
+    def cmd(self, c, timeout=3.0, allow_clear=False):
+        if not (allow_clear and c == "04") and not c.upper().replace(" ", "").startswith(ALLOWED_PREFIX):
             raise ElmError("Tylko odczyt: komenda %s zablokowana." % c)
         self.j.write((c + "\r").encode("ascii"))
         r = str(self.j.readUntilPrompt(float(timeout)))
@@ -89,6 +93,14 @@ class Elm327:
         except (ElmError, OSError): v = DASH
         out.append("%-30s %10s" % ("Napięcie (gniazdo OBD)", v))
         return "\n".join(out)
+
+    def clear_faults(self, confirmed=False):
+        if not confirmed: raise ElmError("Kasowanie wymaga potwierdzenia.")
+        if not self.ok: return "Kasowanie błędów OBD-II: %s\n%s" % (DASH, NO_LINK)
+        try: r = self.cmd("04", 8.0, allow_clear=True)
+        except (ElmError, OSError) as e: return "Kasowanie: NIE wykonano – %s" % e
+        ok = any(l.replace(" ", "").startswith("44") for l in r)
+        return "Kasowanie błędów OBD-II: %s (%s)" % ("potwierdzone (44)" if ok else "brak potwierdzenia", " | ".join(r) or "(nic)")
 
     def faults_report(self):
         if not self.ok: return "Błędy OBD-II: %s\n%s" % (DASH, NO_LINK)

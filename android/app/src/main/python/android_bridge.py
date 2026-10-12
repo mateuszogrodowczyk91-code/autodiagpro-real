@@ -29,8 +29,15 @@ class JavaLink:
     def close(self): self.j.close()
 
 
+CLEAR_WARN = ("Kasowanie pamięci błędów DME (14 FF 00). Zapłon WŁĄCZONY (poz. 2), silnik ZGASZONY.\n"
+              "UWAGA: komenda NIE jest jeszcze zweryfikowana na aucie (nie znaleziona w me72kwp1.prg).")
+
+
 class ReadOnlyTransport(me72.Me72Transport):
-    def request(self, payload):
+    """Odczyt + wyłącznie kasowanie błędów (14 FF 00), i to tylko z allow_clear=True po potwierdzeniu w UI."""
+    def request(self, payload, allow_clear=False):
+        if allow_clear and list(payload) == list(me72.CLEAR_DTC):
+            return super().request(payload)
         if not payload or payload[0] not in DME_READ_SIDS:
             raise WriteBlocked("Tylko odczyt: komenda %s zablokowana (kasowanie/flash/kodowanie/EWS wyłączone)." % me72.hexs(bytes(payload or b"")))
         return super().request(payload)
@@ -107,6 +114,24 @@ def modules():
         out.append("%s [%s]\n  ident: %s\n  błędy: %s\n  %s | zweryfikowane: %s" %
                    (r["moduł"], r["adres"], r["identyfikacja"], r["błędy (surowo)"], r["status"], r["zweryfikowane"]))
     return "\n".join(out)
+
+
+def clear_warning():
+    return CLEAR_WARN if _state["mode"] != "elm" else elm327.CLEAR_WARN
+
+
+def clear_faults(confirmed=False):
+    """Kasowanie błędów – jedyna odblokowana komenda zapisu. Wymaga confirmed=True (okno potwierdzenia w aplikacji)."""
+    if not confirmed: raise WriteBlocked("Kasowanie błędów wymaga potwierdzenia (zapłon wł., silnik zgaszony).")
+    if _state["mode"] == "elm": return _state["elm"].clear_faults(confirmed=True)
+    dme = _state["dme"]
+    if dme is None: return "Kasowanie błędów: %s\n%s" % (DASH, NO_LINK)
+    try:
+        d = dme.t.request(me72.CLEAR_DTC, allow_clear=True)
+    except (me72.DmeError, OSError) as e:
+        return "Kasowanie błędów: NIE wykonano – %s" % _err(e)
+    if d[:1] != b"\x54": return "Kasowanie błędów: DME nie potwierdziło (odpowiedź %s)" % me72.hexs(d)
+    return "Kasowanie błędów: DME potwierdziło (54). Odczytaj błędy ponownie, aby sprawdzić."
 
 
 def blocked(feature):
