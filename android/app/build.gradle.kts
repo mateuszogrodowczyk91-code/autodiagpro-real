@@ -19,6 +19,18 @@ android {
         versionName = "1.3.4-android"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
+    // Stały klucz (sekret CI ANDROID_KEYSTORE_*), żeby kolejne wersje instalowały się jako aktualizacja bez kasowania danych.
+    val ks = System.getenv("ANDROID_KEYSTORE_FILE")
+    signingConfigs {
+        if (ks != null) create("fixed") {
+            storeFile = file(ks); storePassword = System.getenv("ANDROID_KEYSTORE_PASS")
+            keyAlias = "autodiag"; keyPassword = System.getenv("ANDROID_KEYSTORE_PASS")
+        }
+    }
+    buildTypes {
+        getByName("release") { isMinifyEnabled = false; if (ks != null) signingConfig = signingConfigs.getByName("fixed") }
+        getByName("debug") { if (ks != null) signingConfig = signingConfigs.getByName("fixed") }
+    }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }
 }
