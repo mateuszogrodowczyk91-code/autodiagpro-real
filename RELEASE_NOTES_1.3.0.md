@@ -36,3 +36,6 @@ Wersja 1.3.0 nie ma serwera podglądu na telefon/LAN ani aktualizacji definicji 
 
 ## 1.3.2
 - Nowa zakładka „Nie odpala na zimno” (kreator Lingxi, tylko odczyt): akumulator, płyn vs powietrze, nierówność cylindrów, błędy ME7.2 + werdykt z punktacją. Bez połączenia „—” i brak werdyktu. Progi wstępne – do weryfikacji na aucie.
+- Poprawki ME7.2 (PR #3, Engineer Bot/Lingxi): nierówność biegu jako „poz. N (prawdopodobnie cyl. X)” wg kolejności 1,5,8,4,6,3,7,2 z SGBD; adaptacja multiplikatywna FRA_W ze znakiem w %; status lambda – minimalna długość; źródło kwp1 dla 4 kodów.
+- Kasowanie pamięci błędów WYŁĄCZONE (tylko odczyt) do decyzji użytkownika.
+- Wszystkie mapowania i progi nadal do potwierdzenia na aucie.

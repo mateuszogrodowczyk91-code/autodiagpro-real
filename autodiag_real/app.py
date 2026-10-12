@@ -531,6 +531,8 @@ class Main(QMainWindow):
         self.mis_info.setText("Zbieram 20 próbek z DME…"); self.run("rough", job)
 
     def clear_dtc(self):
+        QMessageBox.information(self, "Kasowanie błędów", "Kasowanie pamięci błędów jest WYŁĄCZONE w tej wersji (tylko odczyt).\n"
+                                "Zostanie włączone dopiero po Twojej decyzji i sprawdzeniu komendy na aucie."); return
         if QMessageBox.question(self, "Kasowanie błędów", "Na pewno skasować pamięć błędów DME?\n\nNajpierw przepisz kody.\nSilnik WYŁĄCZONY, zapłon w pozycji 2.\n\n"
                                 "Uwaga: komenda kasowania nie była jeszcze sprawdzona na tym aucie.", QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes: return
         self.run("clear", lambda: self.dev.clear_faults())
@@ -571,7 +573,7 @@ class Main(QMainWindow):
         elif name == "smart": self._smart_done(res)
         elif name == "rough":
             self.rough_samples += res; mean, z, idx, txt = me72.roughness_outlier(self.rough_samples); last = res[-1]
-            fill(self.t_mis, [("%d%s" % (c + 1, "  ◄ ODSTAJE" if idx == c else ""), last[c], mean[c], "—" if z[c] is None else z[c]) for c in range(8)])
+            fill(self.t_mis, [("%s%s" % (me72.rough_label(c + 1), "  ◄ ODSTAJE" if idx == c else ""), last[c], mean[c], "—" if z[c] is None else z[c]) for c in range(8)])
             self.mis_info.setText("Próbek: %d. %s Kolejność pozycji DME vs numer cylindra M62 niepotwierdzona." % (len(self.rough_samples), txt))
             top = max(max(abs(m) for m in mean), 1e-9)
             for c, (b, vl) in enumerate(self.mis_bars):
@@ -609,7 +611,7 @@ class Main(QMainWindow):
         v.addWidget(QLabel("<b>Szczegóły zaznaczonego błędu (freeze frame, 17 HH LL)</b>")); self.t_ff = table(["Pole", "Wartość z DME"]); v.addWidget(self.t_ff, 1)
         return self._page("Diagnostyka – pamięć błędów", "18 02 FF FF · szczegóły 17 · kasowanie 14 FF 00", w,
                           [("Czytaj błędy", self.read_dtc, True), ("Szczegóły błędu (freeze frame)", self.read_ff, True), ("Eksport CSV…", lambda: self.export_csv(self.t_dtc, "bledy_dme"), False),
-                           ("Kasuj błędy…", self.clear_dtc, True)], self.dtc_info)
+                           ("Kasuj błędy… (wyłączone)", self.clear_dtc, False)], self.dtc_info)
 
     # --- wszystkie DTC
     def _page_alldtc(self):
