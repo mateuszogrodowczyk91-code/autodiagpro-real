@@ -16,6 +16,8 @@ import os
 
 from . import me72_dtc
 
+# Kody obecne wyłącznie w me72kwp1.prg (sprawdzone przez Engineer Bota na me72kwp0/1.prg) – pole "source" lokalnego JSON bywa nieprecyzyjne.
+KWP1_ONLY = frozenset({0x7A, 0x7F, 0xC9, 0xEC})
 UNCERTAIN = "mapowanie ORT→nr NIEPEWNE, do potwierdzenia na aucie"
 _cache = {}
 
@@ -39,8 +41,11 @@ def load_prg(path=None):
         if p not in _cache:
             try:
                 with open(p, encoding="utf-8") as f: codes = json.load(f).get("codes", [])
-                _cache[p] = {int(e["decimal"]): e for e in codes
-                             if isinstance(e, dict) and "decimal" in e and 0 <= int(e["decimal"]) <= 0xFF}
+                m = {int(e["decimal"]): dict(e) for e in codes
+                     if isinstance(e, dict) and "decimal" in e and 0 <= int(e["decimal"]) <= 0xFF}
+                for n in KWP1_ONLY:
+                    if n in m: m[n]["source"] = "me72kwp1.prg"
+                _cache[p] = m
             except (OSError, ValueError, TypeError, KeyError):
                 _cache[p] = {}
         if _cache[p]: return _cache[p], p

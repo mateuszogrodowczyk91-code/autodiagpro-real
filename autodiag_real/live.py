@@ -10,7 +10,7 @@ DASH = "—"
 GROUPS = [("silnik", "engine", ["Obroty", "Temp. płynu chłodzącego", "Temp. powietrza dolotowego", "Prędkość", "Czas wtrysku",
                                  "Kąt wyprzedzenia zapłonu", "Przepustnica", "Masa powietrza (MAF)", "Moment wskazany",
                                  "Napięcie akumulatora (DME)"]),
-          ("nierówność biegu", "roughness", ["Nierówność poz. %d" % i for i in range(1, 9)]),
+          ("nierówność biegu", "roughness", ["Nierówność " + me72.rough_label(i) for i in range(1, 9)]),
           ("lambda", "lambda_status", None)]
 
 
@@ -28,7 +28,7 @@ def snapshot(dme):
             r = getattr(dme, meth)()
             ok_any = True
             if meth == "roughness":
-                rows += [("Nierówność poz. %d" % (i + 1), round(v, 3), "1/s", "OK (kolejność cyl. niepotwierdzona)") for i, v in enumerate(r)]
+                rows += [("Nierówność " + me72.rough_label(i + 1), round(v, 3), "1/s", "OK (cyl. do potwierdzenia na aucie)") for i, v in enumerate(r)]
             else:
                 rows += [(n, v, u, "OK") for n, v, u in r]
         except me72.DmeError as e:

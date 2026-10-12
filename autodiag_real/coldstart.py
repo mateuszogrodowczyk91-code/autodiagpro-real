@@ -72,9 +72,9 @@ def run(dme, samples=ROUGH_SAMPLES):
         except me72.DmeError: break
     if rough:
         _, _, worst, desc = me72.roughness_outlier(rough)
-        steps.append(("Nierówność cylindrów", desc, "%d próbek, kolejność cyl. niepotwierdzona" % len(rough)))
+        steps.append(("Nierówność cylindrów", desc, "%d próbek, mapowanie poz.→cyl. z SGBD, do potwierdzenia na aucie" % len(rough)))
         if worst is not None:
-            add("coil:%d" % (worst + 1), 2, "Pozycja %d odstaje w nierówności biegu. Zamień cewkę z sąsiednim cylindrem i sprawdź, czy problem idzie za cewką." % (worst + 1))
+            add("coil:%d" % (worst + 1), 2, "%s odstaje w nierówności biegu (cylinder do potwierdzenia na aucie). Zamień cewkę z sąsiednim cylindrem i sprawdź, czy problem idzie za cewką." % me72.rough_label(worst + 1).capitalize())
             add("plugs", 1, "Odstający cylinder – świeca też możliwa.")
     else:
         steps.append(("Nierówność cylindrów", DASH, "brak danych (silnik musi pracować)"))
@@ -103,7 +103,7 @@ def run(dme, samples=ROUGH_SAMPLES):
     add("pump", 0, "Kluczyk poz. 2: spod tylnej kanapy ma być słychać szum pompy 1–2 s. Cisza = pompa lub przekaźnik.")
     verdict = []
     for k, (pts, why) in score.items():
-        name = ("Cewka zapłonowa – cylinder (pozycja) %s" % k.split(":")[1]) if k.startswith("coil:") else label[k]
+        name = ("Zapłon/cewka – %s, do potwierdzenia na aucie" % me72.rough_label(int(k.split(":")[1]))) if k.startswith("coil:") else label[k]
         verdict.append((pts, name, why))
     verdict.sort(key=lambda v: -v[0])
     return {"connected": True, "steps": steps, "verdict": verdict,
