@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- K+DCAN: FTDI FT232R -->
+    <usb-device vendor-id="1027" product-id="24577" />
+    <usb-device vendor-id="1027" />
+</resources>

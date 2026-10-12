@@ -1,0 +1,25 @@
+name: Android APK
+on:
+  push: { paths: ["android/**", "autodiag_real/**", ".github/workflows/android.yml"] }
+  pull_request:
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Testy Python (desktop + Android bridge)
+        run: pip install pytest && python -m pytest -q tests android/tests
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.7" }
+      - name: Build APK (debug, podpisany kluczem debug)
+        working-directory: android
+        run: gradle --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: AutoDiagPro-E39-android-debug
+          path: android/app/build/outputs/apk/debug/*.apk
